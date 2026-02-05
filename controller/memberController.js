@@ -1,90 +1,97 @@
-import database from "../service/database.js";
+import database from "../service/database.js"; // ตรวจสอบ path ให้ถูกว่าไฟล์ database.js อยู่ไหน
 import bcrypt from 'bcrypt';
-import jwt, { decode } from 'jsonwebtoken';
-const secret = 'DaranWeb'
+import jwt from 'jsonwebtoken';
 
-// เส้นทางสำหรับการลงทะเบียน
+const secret = 'DaranWeb';
+
+// --- REGISTER ---
 export async function memberRegister(req, res) {
   try {
-    const { email, password, fname, lname } = req.body;
+    // รับค่า userName และ password (ตัด fname, lname ออกเพราะใน DB ไม่มีที่เก็บ)
+    const { userName, password } = req.body;
 
-    // ตรวจสอบว่าค่าที่ส่งมามีครบหรือไม่
-    if (!email || !password || !fname || !lname) {
-      return res.status(400).json({ error: 'Missing required fields' });
+    // ตรวจสอบค่าว่าง
+    if (!userName || !password) {
+      return res.status(400).json({ error: 'Missing required fields (userName, password)' });
     }
 
     const saltRounds = 10;
-
-    // ใช้ async/await เพื่อรอผลการ hash ของรหัสผ่าน
     const hash = await bcrypt.hash(password, saltRounds);
 
-    // คำสั่ง SQL สำหรับการเพิ่มข้อมูลผู้ใช้
-    const result = await database.query({
-      text: `INSERT INTO users ("email", "password", "fname", "lname")
-             VALUES ($1, $2, $3, $4)`,
-      values: [email, hash, fname, lname],
+    // SQL สำหรับ MySQL:
+    // 1. ใช้เครื่องหมาย ? แทน $1
+    // 2. ไม่ต้องใส่ " ฟันหนูที่ชื่อ column
+    // 3. userId เป็น Auto Increment ไม่ต้องใส่ใน insert
+    const sql = 'INSERT INTO users (userName, userPassword) VALUES (?, ?)';
+    
+    // MySQL2 จะ return ผลลัพธ์เป็น array [result, fields]
+    const [result] = await database.query(sql, [userName, hash]);
+
+    console.log(result); 
+
+    res.status(201).json({ 
+        message: 'User registered successfully',
+        userId: result.insertId // ส่ง ID ที่เพิ่งสร้างกลับไปให้ด้วย (MySQL ทำได้)
     });
 
-    console.log(result);  // ผลลัพธ์ที่ได้จากคำสั่ง SQL
-
-    // ส่งการตอบกลับไปยัง client
-    res.status(201).json({ message: 'User registered successfully' });
   } catch (error) {
     console.error('Error querying database:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 };
 
-
+// --- LOGIN ---
 export async function memberLogin(req, res) {
-  console.log('Member Login')
-    try {
-      const { email, password } = req.body;
-      console.log(email, password)
-  
-      // Query the database for the user by email
-      const result = await database.query({
-        text: `SELECT * FROM users WHERE "email" = $1`,
-        values: [email],
-      });
-  
-      // If no user is found, return an error
-      if (result.rows.length === 0) {
-        return res.status(404).json({ error: 'User not found' });
-      }
-  
-      // Compare the hashed password with the stored hash in the database
-      const loginok = await bcrypt.compare(password, result.rows[0].password);
-  
-      if (loginok) {
-        // Create a JWT token if password matches
-        const token = jwt.sign({ email: result.rows[0].email }, secret, { expiresIn: '1h' });
-        // Return a successful response with the token
-        return res.json({
-          message: 'success',
-          // data: result.rows[0],
-          token,
-        });
-      } else {
-        // If password does not match
-        return res.status(401).json({ error: 'fail' });
-      }
-    } catch (error) {
-      console.error('Error querying database:', error);
-      return res.status(500).json({ error: 'Internal server error' });
+  console.log('Member Login');
+  try {
+    // รับค่า userName แทน email
+    const { userName, password } = req.body;
+    console.log(userName, password);
+
+    // Query หา user จาก userName
+    // สังเกตการใช้ Destructuring [rows] เพราะ mysql2 return เป็น array ของ rows
+    const [rows] = await database.query('SELECT * FROM users WHERE userName = ?', [userName]);
+
+    // ถ้าไม่เจอข้อมูล (Array ว่าง)
+    if (rows.length === 0) {
+      return res.status(404).json({ error: 'User not found' });
     }
+
+    const user = rows[0]; // ดึง user คนแรกออกมา
+
+    // เทียบรหัสผ่าน (ใช้ column userPassword จาก DB)
+    const loginok = await bcrypt.compare(password, user.userPassword);
+
+    if (loginok) {
+      const token = jwt.sign({ userName: user.userName, userId: user.userId }, secret, { expiresIn: '1h' });
+      
+      // ✅ แก้ไขตรงนี้: ส่งข้อมูล User กลับไปพร้อมกับ Token
+      return res.json({
+        message: 'success',
+        token,
+        payload: {
+            userId: user.userId,
+            userName: user.userName
+        }
+      });
+    } else {
+      return res.status(401).json({ error: 'fail' });
+    }
+
+  } catch (error) {
+    console.error('Error querying database:', error);
+    return res.status(500).json({ error: 'Internal server error' });
   }
+}
 
-
+// --- AUTHEN (เหมือนเดิม) ---
 export async function memberAuthen(req, res) {
     try {
-        const token = req.headers.authorization.split(' ')[1]
+        const token = req.headers.authorization.split(' ')[1];
         const decoded = jwt.verify(token, secret);
-      // ส่งการตอบกลับไปยัง client
-      res.status(201).json({message:'ok', decoded });
+        res.status(200).json({ message: 'ok', decoded });
     } catch (error) {
-      console.error('Error querying database:', error);
-      res.status(500).json({ error: 'Internal server error' });
+        console.error('Authen Error:', error);
+        res.status(401).json({ error: 'Invalid or expired token' });
     }
-  };
-  
+};

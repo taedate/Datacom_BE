@@ -1,20 +1,25 @@
 import express from 'express';
 import cors from 'cors';
 import bodyParser from 'body-parser';
-import memRouter from './router/memberRouter.js'
+import memRouter from './router/memberRouter.js';
+import repairRouter from './router/repairRouter.js';
+import projectRouter from './router/projectRouter.js';
+import sentRepairRouter from './router/sentRepairRouter.js';
 
 const app = express();
 
-// ใช้ CORS
-app.use(cors());
+app.use(cors({
+    origin: ['http://localhost:5173', 'http://127.0.0.1:5173'], // ใส่ URL ของ Frontend (Vite ปกติคือ 5173)
+    credentials: true // อนุญาตให้ส่ง Cookies/Auth headers
+}));
+app.use(bodyParser.json());
 
-// ใช้ body-parser เพื่ออ่านข้อมูล JSON
-app.use(bodyParser.json()); // ใช้ middleware ให้ express อ่าน JSON
-app.use(memRouter)
+// เรียกใช้ Router
+app.use(memRouter);
+app.use(repairRouter);
+app.use(projectRouter);
+app.use(sentRepairRouter);
 
-
-
-// เปิดให้แอปทำงานที่พอร์ต 3000
 app.listen(3333, function () {
   console.log('CORS-enabled web server listening on port 3333');
 });
