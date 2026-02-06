@@ -95,3 +95,26 @@ export async function memberAuthen(req, res) {
         res.status(401).json({ error: 'Invalid or expired token' });
     }
 };
+
+// --- LOGOUT ---
+export async function memberLogout(req, res) {
+    try {
+        // ตรวจสอบ token ก่อน
+        const authHeader = req.headers.authorization;
+        if (!authHeader) {
+            return res.status(401).json({ error: 'No token provided' });
+        }
+
+        const token = authHeader.split(' ')[1];
+        const decoded = jwt.verify(token, secret);
+
+        // ใน JWT ไม่ต้องเก็บ token ที่ backend, logout = ลบ token ที่ frontend
+        res.status(200).json({ 
+            message: 'Logout successful',
+            userId: decoded.userId
+        });
+    } catch (error) {
+        console.error('Logout Error:', error);
+        res.status(401).json({ error: 'Invalid or expired token' });
+    }
+};
