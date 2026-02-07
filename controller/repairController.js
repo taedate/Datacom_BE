@@ -2,11 +2,12 @@ import database from "../service/database.js";
 import puppeteer from "puppeteer";
 export async function getCaseInfo(req, res) {
     try {
-        const { page = 1, itemsPerPage = 10, search, caseStatus, caseType, dateRange, sort_by, sort_order } = req.query;
+        const { page = 1, itemsPerPage = 10, search, caseStatus, caseType, dateRange, sort_by, sort_order, lastDate } = req.query;
         const offset = (page - 1) * itemsPerPage;
+        const limit = Number(itemsPerPage) || 10;
 
-        // SQL พื้นฐาน
-        let sql = `SELECT * FROM caseRepair WHERE 1=1`;
+        // SQL พื้นฐาน (เลือกคอลัมน์ที่จำเป็น แทน SELECT *)
+        let sql = `SELECT caseId, cusFirstName, cusLastName, cusPhone, caseInstitution, brokenSymptom, caseType, caseStatus, caseBrand, caseModel, caseSN, caseDurableArticles, caseEquipment, datePickUp, dateBeforePicUp, dateComplete, dateDelivered, created_at FROM caseRepair WHERE 1=1`;
         let countSql = `SELECT COUNT(*) as total FROM caseRepair WHERE 1=1`;
         let params = [];
 
@@ -42,16 +43,24 @@ export async function getCaseInfo(req, res) {
              }
         }
 
-        // Logic Sorting (แก้ให้เรียงตาม created_at เพื่อความถูกต้องที่สุด)
+        // If client provides lastDate -> use keyset pagination (more efficient for large offsets)
+        if (lastDate) {
+            sql += ` AND date(created_at) < ?`;
+            params.push(lastDate);
+            sql += ` ORDER BY created_at DESC LIMIT ?`;
+            const [rows] = await database.query(sql, [...params, limit]);
+            const hasMore = rows.length === limit;
+            return res.json({ message: 'success', data: rows, hasMore });
+        }
+
+        // Logic Sorting (fallback to created_at)
         if (sort_by) {
-            // ถ้ามีการกดหัวตาราง ให้เรียงตามนั้น
             sql += ` ORDER BY ${sort_by} ${sort_order === 'asc' ? 'ASC' : 'DESC'}`;
         } else {
-            // Default: เรียงตามเวลาที่สร้าง (ล่าสุดอยู่บนสุด) ไม่สน Prefix ID
             sql += ` ORDER BY created_at DESC`;
         }
 
-        // Pagination
+        // Pagination (offset-based for smaller page numbers)
         const queryParams = [...params, Number(itemsPerPage), Number(offset)];
 
         // Execute
@@ -74,16 +83,24 @@ export async function getCaseInfo(req, res) {
 // API สำหรับดึงตัวเลือกมาใส่ Dropdown
 export async function getFilterOptions(req, res) {
     try {
-        const [statusRows] = await database.query('SELECT DISTINCT caseStatus FROM caseRepair');
-        const [typeRows] = await database.query('SELECT DISTINCT caseType FROM caseRepair');
+        // cache filter options for 5 minutes to reduce DB hits
+        const cacheKey = 'repair:filterOptions';
+        try {
+            const cache = (await import('../service/cache.js')).default;
+            const cached = cache.get(cacheKey);
+            if (cached) return res.json({ message: 'success', data: cached });
 
-        res.json({
-            message: 'success',
-            data: {
-                statuses: statusRows.map(r => r.caseStatus).filter(Boolean),
-                types: typeRows.map(r => r.caseType).filter(Boolean)
-            }
-        });
+            const [statusRows] = await database.query('SELECT DISTINCT caseStatus FROM caseRepair');
+            const [typeRows] = await database.query('SELECT DISTINCT caseType FROM caseRepair');
+            const data = { statuses: statusRows.map(r => r.caseStatus).filter(Boolean), types: typeRows.map(r => r.caseType).filter(Boolean) };
+            cache.set(cacheKey, data, 300);
+            return res.json({ message: 'success', data });
+        } catch (e) {
+            // fallback without cache
+            const [statusRows] = await database.query('SELECT DISTINCT caseStatus FROM caseRepair');
+            const [typeRows] = await database.query('SELECT DISTINCT caseType FROM caseRepair');
+            return res.json({ message: 'success', data: { statuses: statusRows.map(r => r.caseStatus).filter(Boolean), types: typeRows.map(r => r.caseType).filter(Boolean) } });
+        }
     } catch (error) {
         res.status(500).json({ error: 'Database error' });
     }
