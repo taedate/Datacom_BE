@@ -105,8 +105,8 @@ export async function createProject(req, res) {
 
         await database.query(sql, [
             newId,
-            pAddress || null,
-            pDetail || null,
+            pAddress || "",
+            pDetail || "",
             pStatus || 'รอดำเนินการ',
             pImageJSON, // ใส่ JSON String ลงไป
             dateCreate || null,
