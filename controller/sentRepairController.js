@@ -34,9 +34,10 @@ function formatDateThai(dateStr) {
 // ------------------------------------------------------------------
 export async function getSentRepairInfo(req, res) {
     try {
-        const { page = 1, itemsPerPage = 10, search, caseSType, dateRange, sort_by, sort_order, status } = req.query;
+        const { page = 1, itemsPerPage = 10, search, caseSType, dateRange, sort_by, sort_order, status, lastDate } = req.query;
         const offset = (page - 1) * itemsPerPage;
-        let sql = `SELECT * FROM caseSentRepair WHERE 1=1`;
+        const limit = Number(itemsPerPage) || 10;
+        let sql = `SELECT caseSId, caseSToMechanic, caseSOrderNo, caseSCusName, DateSOfSent, caseSType, caseSBrand, caseSModel, caseSSN, brokenSymptom, caseSEquipment, dateOfReceived, caseSRecipient, created_at FROM caseSentRepair WHERE 1=1`;
         let countSql = `SELECT COUNT(*) as total FROM caseSentRepair WHERE 1=1`;
         let params = [];
 
@@ -55,6 +56,16 @@ export async function getSentRepairInfo(req, res) {
             if (status === 'รับคืนแล้ว') { sql += ` AND dateOfReceived IS NOT NULL`; countSql += ` AND dateOfReceived IS NOT NULL`; } 
             else if (status === 'ส่งซ่อมอยู่') { sql += ` AND dateOfReceived IS NULL`; countSql += ` AND dateOfReceived IS NULL`; }
         }
+        // keyset pagination support
+        if (lastDate) {
+            sql += ` AND date(created_at) < ?`;
+            params.push(lastDate);
+            sql += ` ORDER BY created_at DESC LIMIT ?`;
+            const [rows] = await database.query(sql, [...params, limit]);
+            const hasMore = rows.length === limit;
+            return res.json({ message: 'success', data: rows, hasMore });
+        }
+
         if (sort_by) { sql += ` ORDER BY ${sort_by} ${sort_order === 'asc' ? 'ASC' : 'DESC'}, caseSId DESC`; } 
         else { sql += ` ORDER BY created_at DESC, caseSId DESC`; }
 

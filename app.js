@@ -1,6 +1,7 @@
 import express from 'express';
 import cors from 'cors';
-import bodyParser from 'body-parser';
+import compression from 'compression';
+import helmet from 'helmet';
 import memRouter from './router/memberRouter.js';
 import repairRouter from './router/repairRouter.js';
 import projectRouter from './router/projectRouter.js';
@@ -15,14 +16,16 @@ const app = express();
 // 2. แก้ CORS ให้ยอมรับ Domain ของ Hostinger
 app.use(cors({
     origin: [
-        'http://localhost:5174', 
-        'http://127.0.0.1:5174',
+        'http://localhost:5173', 
+        'http://127.0.0.1:5173',
         'https://employeedatacom.datacom-service.com' // <-- ใส่โดเมน Frontend ของคุณที่นี่ (ห้ามมี / ปิดท้าย)
     ],
     credentials: true 
 }));
 
-app.use(bodyParser.json());
+app.use(helmet());
+app.use(compression());
+app.use(express.json());
 
 // เรียกใช้ Router
 app.use(memRouter);

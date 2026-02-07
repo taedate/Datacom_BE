@@ -63,7 +63,7 @@ export async function memberLogin(req, res) {
     const loginok = await bcrypt.compare(password, user.userPassword);
 
     if (loginok) {
-      const token = jwt.sign({ userName: user.userName, userId: user.userId }, secret, { expiresIn: '1h' });
+      const token = jwt.sign({ userName: user.userName, userId: user.userId }, secret);
       
       // ✅ แก้ไขตรงนี้: ส่งข้อมูล User กลับไปพร้อมกับ Token
       return res.json({
