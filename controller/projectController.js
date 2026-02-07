@@ -3,7 +3,7 @@ import database from "../service/database.js";
 // 1. ดึงข้อมูลลงตาราง (Search + Filter + Pagination)
 export async function getProjectInfo(req, res) {
     try {
-        const { page = 1, itemsPerPage = 10, search, pStatus, dateRange, sort_by, sort_order, lastDate } = req.query;
+        const { page = 1, itemsPerPage = 10, search, pStatus, dateRange, sort_by, sort_order } = req.query;
         const offset = (page - 1) * itemsPerPage;
         const limit = Number(itemsPerPage) || 10;
 
@@ -70,22 +70,12 @@ export async function getProjectDetail(req, res) {
     }
 }
 
-// 3. สร้างงานติดตั้งใหม่
+// 3. สร้างงานติดตั้งใหม่ (สร้างเอกสารก่อน ยังไม่มีรูป)
 export async function createProject(req, res) {
     try {
         const { pAddress, pDetail, pStatus, dateCreate, dateComplete } = req.body;
 
-        // --- Logic จัดการรูปภาพหลายรูป ---
-        let imagePaths = [];
-        // req.files (มี s) จะมาเป็น Array
-        if (req.files && req.files.length > 0) {
-            imagePaths = req.files.map(file => `uploads/projects/${file.filename}`);
-        }
-        // แปลง Array เป็น String เพื่อเก็บใน Database (เช่น '["uploads/a.jpg", "uploads/b.jpg"]')
-        const pImageJSON = imagePaths.length > 0 ? JSON.stringify(imagePaths) : null;
-
-
-        // --- Gen ID ---
+        // --- Gen ID (PJ-XXX) ---
         const [lastRows] = await database.query(
             `SELECT pId FROM caseProject WHERE pId LIKE 'PJ-%' ORDER BY LENGTH(pId) DESC, pId DESC LIMIT 1`
         );
@@ -103,12 +93,13 @@ export async function createProject(req, res) {
             (pId, pAddress, pDetail, pStatus, pImage, dateCreate, dateComplete, created_at) 
             VALUES (?, ?, ?, ?, ?, ?, ?, NOW())`;
 
+        // สร้างใหม่: pImage เป็น null ไปก่อน (รูปจะมาตอน Update)
         await database.query(sql, [
             newId,
             pAddress || "",
             pDetail || "",
             pStatus || 'รอดำเนินการ',
-            pImageJSON, // ใส่ JSON String ลงไป
+            null, // pImage = null
             dateCreate || null,
             dateComplete || null
         ]);
@@ -121,32 +112,40 @@ export async function createProject(req, res) {
     }
 }
 
-// 4. อัปเดตงาน (Update) - แบบเพิ่มรูปใหม่เข้าไปต่อท้ายรูปเดิม
+// 4. อัปเดตงาน (Update) - เพิ่มรูปเข้าโฟลเดอร์ตาม pId
 export async function updateProject(req, res) {
     try {
         const { pId, pAddress, pDetail, pStatus, dateCreate, dateComplete } = req.body;
 
-        // 1. หาข้อมูลเก่าก่อน เพื่อเอารูปเก่ามา
+        // 1. ดึงข้อมูลเก่าเพื่อเอารูปเดิมมาตั้งต้น
         const [oldRows] = await database.query('SELECT pImage FROM caseProject WHERE pId = ?', [pId]);
         let currentImages = [];
         
         if (oldRows.length > 0 && oldRows[0].pImage) {
             try {
-                // แปลงจาก String ใน DB กลับเป็น Array
                 currentImages = JSON.parse(oldRows[0].pImage);
             } catch (e) {
-                // เผื่อข้อมูลเก่าไม่ได้เป็น JSON (เช่นเป็น path เดี่ยวๆ ของระบบเก่า)
+                // กันเหนียว กรณีข้อมูลเก่าไม่ใช่ JSON
                 currentImages = [oldRows[0].pImage];
             }
+            // แปลงให้เป็น Array เสมอ
+            if (!Array.isArray(currentImages)) currentImages = [currentImages];
         }
 
-        // 2. ถ้ามีรูปใหม่เข้ามา ให้เอาไปต่อ (Push) ใส่ Array เดิม
+        // 2. จัดการรูปภาพใหม่ (ถ้ามี)
+        // Multer ได้นำไฟล์ไปวางใน uploads/projects/PJ-XXX ให้เรียบร้อยแล้ว
         if (req.files && req.files.length > 0) {
-            const newPaths = req.files.map(file => file.path.replace(/\\/g, "/"));
-            currentImages = [...currentImages, ...newPaths]; // รวมเก่า + ใหม่
+            const newPaths = req.files.map(file => {
+                // สร้าง Path ที่ถูกต้องเพื่อเก็บใน DB (ใช้ / เสมอ)
+                // ผลลัพธ์: uploads/projects/PJ-018/filename.jpg
+                return `uploads/projects/${pId}/${file.filename}`;
+            });
+            
+            // เอาของใหม่ต่อท้ายของเก่า
+            currentImages = [...currentImages, ...newPaths];
         }
 
-        // 3. แปลงกลับเป็น JSON String เพื่อเตรียมบันทึก
+        // 3. แปลงเป็น JSON String เพื่อบันทึก
         const pImageJSON = currentImages.length > 0 ? JSON.stringify(currentImages) : null;
 
         const sql = `UPDATE caseProject SET 
@@ -159,7 +158,7 @@ export async function updateProject(req, res) {
             pStatus, 
             dateCreate || null, 
             dateComplete || null,
-            pImageJSON, // อัปเดต list รูปภาพใหม่
+            pImageJSON, 
             pId
         ]);
 
@@ -173,9 +172,8 @@ export async function updateProject(req, res) {
 // 5. ลบงาน
 export async function deleteProject(req, res) {
     try {
-        // (Optional) คุณอาจจะอยากดึงข้อมูลมาเพื่อลบไฟล์รูปภาพออกจาก Disk ด้วยก่อนลบจาก DB
-        // const [rows] = await database.query('SELECT pImage FROM caseProject WHERE pId = ?', [req.body.pId]);
-        // if (rows.length > 0 && rows[0].pImage) { fs.unlinkSync(rows[0].pImage); }
+        // (Optional) ถ้าอยากลบไฟล์รูปภาพออกจาก Disk ด้วย ต้องเขียน Logic เพิ่มตรงนี้
+        // โดยการ SELECT pImage มาก่อน แล้ววนลูป fs.unlinkSync
 
         await database.query('DELETE FROM caseProject WHERE pId = ?', [req.body.pId]);
         res.json({ message: 'success' });
