@@ -118,3 +118,26 @@ export async function memberLogout(req, res) {
         res.status(401).json({ error: 'Invalid or expired token' });
     }
 };
+
+
+export async function systemHealthCheck(req, res) {
+  try {
+    // 1. ลอง Query ง่ายๆ เพื่อปลุก Database (ถ้า DB หลับอยู่ มันจะตื่นตอนนี้)
+    await database.query('SELECT 1');
+
+    // 2. ส่งค่ากลับไปบอกว่า "ฉันยังอยู่ดี"
+    res.status(200).json({ 
+      status: 'online', 
+      message: 'Server and Database are active',
+      timestamp: new Date()
+    });
+
+  } catch (error) {
+    console.error('Health Check Error:', error);
+    // ถ้า DB ล่ม หรือต่อไม่ได้ จะส่ง Error 500 กลับไป
+    res.status(500).json({ 
+      status: 'offline', 
+      error: 'Database connection failed' 
+    });
+  }
+};
