@@ -79,7 +79,7 @@ export async function createProject(req, res) {
         let imagePaths = [];
         // req.files (มี s) จะมาเป็น Array
         if (req.files && req.files.length > 0) {
-            imagePaths = req.files.map(file => file.path.replace(/\\/g, "/"));
+            imagePaths = req.files.map(file => `uploads/projects/${file.filename}`);
         }
         // แปลง Array เป็น String เพื่อเก็บใน Database (เช่น '["uploads/a.jpg", "uploads/b.jpg"]')
         const pImageJSON = imagePaths.length > 0 ? JSON.stringify(imagePaths) : null;
