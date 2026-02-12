@@ -19,6 +19,5 @@ router.post('/update-sent-repair', sentRepairController.updateSentRepair);
 // Delete
 router.post('/delete-sent-repair', sentRepairController.deleteSentRepair);
 
-router.get('/print-sent-repair/:id', sentRepairController.printSentRepairPDF);
 
 export default router;
