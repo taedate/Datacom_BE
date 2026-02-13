@@ -1,19 +1,5 @@
 import database from "../service/database.js";
 
-// --- Date Helper ---
-function formatDateThai(dateStr) {
-    if (!dateStr) return "";
-    let day, month, year;
-    dateStr = dateStr.split(' ')[0]; 
-    if (dateStr.includes('/')) { [day, month, year] = dateStr.split('/'); } 
-    else if (dateStr.includes('-')) { [day, month, year] = dateStr.split('-'); } 
-    else { return dateStr; }
-    const thaiMonths = ["ม.ค.", "ก.พ.", "มี.ค.", "เม.ย.", "พ.ค.", "มิ.ย.", "ก.ค.", "ส.ค.", "ก.ย.", "ต.ค.", "พ.ย.", "ธ.ค."];
-    const monthIndex = parseInt(month, 10) - 1;
-    const dayInt = parseInt(day, 10);
-    if (monthIndex >= 0 && monthIndex < 12) { return `${dayInt} ${thaiMonths[monthIndex]} ${year}`; }
-    return dateStr;
-}
 
 // ------------------------------------------------------------------
 // 1. CRUD Functions
@@ -74,19 +60,72 @@ export async function getSentRepairDetail(req, res) {
 
 export async function createSentRepair(req, res) {
     try {
-        const { caseSToMechanic, caseSOrderNo, caseSCusName, DateSOfSent, caseSType, caseSBrand, caseSModel, caseSSN, brokenSymptom, caseSEquipment, dateOfReceived, caseSRecipient } = req.body;
+        const { 
+            caseSToMechanic, caseSOrderNo, caseSCusName, DateSOfSent, 
+            caseSType, caseSBrand, caseSModel, caseSSN, brokenSymptom, 
+            caseSEquipment, dateOfReceived, caseSRecipient,
+            refCaseId // <--- ค่านี้สำคัญ
+        } = req.body;
+
+        // 🔍 DEBUG 1: เช็คว่า Frontend ส่งค่ามาครบไหม
+        console.log("📌 DEBUG PAYLOAD:", { 
+            caseSCusName, 
+            refCaseId: refCaseId // ถ้าตรงนี้เป็น undefined หรือ null แสดงว่า Frontend ผิด
+        });
+
         const prefix = "S"; 
+        
+        // --- Gen ID ---
         const [lastRows] = await database.query(`SELECT caseSId FROM caseSentRepair WHERE caseSId LIKE ? ORDER BY LENGTH(caseSId) DESC, caseSId DESC LIMIT 1`, [`${prefix}-%`]);
         let newId = `${prefix}-001`;
         if (lastRows.length > 0) {
             const lastId = lastRows[0].caseSId;
-            const lastNum = parseInt(lastId.split('-')[1]);
+            const lastNum = parseInt(lastId.split('-')[1]); 
             newId = `${prefix}-${String(lastNum + 1).padStart(3, '0')}`;
         }
+
+        // --- Insert ---
         const sql = `INSERT INTO caseSentRepair (caseSId, caseSToMechanic, caseSOrderNo, caseSCusName, DateSOfSent, caseSType, caseSBrand, caseSModel, caseSSN, brokenSymptom, caseSEquipment, dateOfReceived, caseSRecipient, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())`;
-        await database.query(sql, [newId, caseSToMechanic || '', caseSOrderNo || '', caseSCusName || '', DateSOfSent || null, caseSType || '', caseSBrand || '', caseSModel || '', caseSSN || '', brokenSymptom || '', caseSEquipment || '', dateOfReceived || null, caseSRecipient || '' ]);
+        
+        await database.query(sql, [
+            newId, caseSToMechanic || '', caseSOrderNo || '', caseSCusName || '', 
+            DateSOfSent || null, caseSType || '', caseSBrand || '', caseSModel || '', 
+            caseSSN || '', brokenSymptom || '', caseSEquipment || '', 
+            dateOfReceived || null, caseSRecipient || '' 
+        ]);
+
+        // ============================================================
+        // Update Link Back
+        // ============================================================
+        if (refCaseId) {
+            console.log(`🔄 กำลังอัปเดต caseRepair ID: ${refCaseId} ด้วย SentID: ${newId}`);
+            
+            const updateSql = `
+                UPDATE caseRepair 
+                SET 
+                    refSentRepairId = ?, 
+                    caseStatus = 'ส่งซ่อมอยู่' 
+                WHERE caseId = ?
+            `;
+            
+            // 🔍 DEBUG 2: ดูผลลัพธ์การอัปเดต
+            const [result] = await database.query(updateSql, [newId, refCaseId]);
+            console.log("✅ Update Result:", result);
+
+            if (result.affectedRows === 0) {
+                console.error("⚠️ อัปเดตไม่สำเร็จ! ไม่เจอ caseId นี้ในตาราง caseRepair");
+            }
+        } else {
+            console.warn("⚠️ ไม่มีการอัปเดตกลับ เพราะ refCaseId เป็นค่าว่าง (Frontend ไม่ได้ส่งมา)");
+        }
+        // ============================================================
+
         res.json({ message: 'success', caseSId: newId });
-    } catch (error) { res.status(500).json({ message: 'error', error: error.message }); }
+
+    } catch (error) { 
+        console.error("❌ ERROR:", error);
+        res.status(500).json({ message: 'error', error: error.message }); 
+    }
 }
 
 export async function updateSentRepair(req, res) {

@@ -41,7 +41,7 @@ const upload = multer({ storage: storage });
 router.get('/get-project-info', pjCtrl.getProjectInfo);
 router.get('/get-project-detail/:id', pjCtrl.getProjectDetail);
 
-router.post('/create-project', pjCtrl.createProject); 
+router.post('/create-project', upload.array('evidence_images', 10), pjCtrl.createProject); 
 // ตอน update รูปจะวิ่งเข้าโฟลเดอร์ PJ-XXX ทันที
 router.post('/update-project', upload.array('evidence_images', 10), pjCtrl.updateProject); 
 router.post('/delete-project', pjCtrl.deleteProject);
