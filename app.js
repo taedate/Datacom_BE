@@ -11,6 +11,7 @@ import repairRouter from './router/repairRouter.js';
 import projectRouter from './router/projectRouter.js';
 import sentRepairRouter from './router/sentRepairRouter.js';
 import dashboardRouter from './router/dashboardRouter.js';
+import quotationRouter from './router/quotationRouter.js';
 
 // --- Config สำหรับ ES Modules ---
 const __filename = fileURLToPath(import.meta.url);
@@ -48,6 +49,7 @@ app.use(repairRouter);
 app.use(projectRouter);
 app.use(sentRepairRouter);
 app.use(dashboardRouter);
+app.use(quotationRouter);
 
 // --- Start Server ---
 app.listen(port, function () {

@@ -7,27 +7,18 @@ export async function getCaseInfo(req, res) {
         const offset = (page - 1) * itemsPerPage;
         const limit = Number(itemsPerPage) || 10;
 
-        // ✅ แก้ไข: เพิ่ม refSentRepairId เข้าไปใน SELECT
+        // Optimized: Select only columns needed for List View
         let sql = `SELECT 
             caseId, 
             cusFirstName, 
             cusLastName, 
             cusPhone, 
-            caseInstitution, 
             brokenSymptom, 
             caseType, 
             caseStatus, 
-            caseBrand, 
-            caseModel, 
-            caseSN, 
-            caseDurableArticles, 
-            caseEquipment, 
             datePickUp, 
-            dateBeforePicUp, 
-            dateComplete, 
-            dateDelivered, 
-            created_at,
-            refSentRepairId 
+            refSentRepairId,
+            created_at
         FROM caseRepair WHERE 1=1`;
 
         let countSql = `SELECT COUNT(*) as total FROM caseRepair WHERE 1=1`;
