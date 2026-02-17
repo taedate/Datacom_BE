@@ -11,5 +11,6 @@ router.post('/create-case', repairController.createCase);           // สำห
 router.post('/update-case', repairController.updateCase);
 
 // router.post('/delete-case', repairController.deleteCase); // อย่าลืมทำเพิ่มถ้าจะใช้ปุ่มลบ
+router.get('/tracking-status', repairController.getTrackingByPhone);
 
 export default router;

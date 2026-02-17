@@ -1,5 +1,4 @@
 import database from "../service/database.js";
-import puppeteer from 'puppeteer-core';
 
 export async function getCaseInfo(req, res) {
     try {
@@ -216,7 +215,8 @@ export async function updateCase(req, res) {
             cusFirstName=?, cusLastName=?, cusPhone=?, caseInstitution=?,
             brokenSymptom=?, caseType=?, caseStatus=?,
             caseBrand=?, caseModel=?, caseSN=?, caseDurableArticles=?, caseEquipment=?,
-            datePickUp=?, dateBeforePicUp=?, dateComplete=?, dateDelivered=?
+            datePickUp=?, dateBeforePicUp=?, dateComplete=?, dateDelivered=?,
+            updated_at=NOW()
             WHERE caseId=?`;
 
         await database.query(sql, [
@@ -236,4 +236,80 @@ export async function updateCase(req, res) {
     }
 }
 
+// 4. Tracking Status for Customer (Public)
+export async function getTrackingByPhone(req, res) {
+    try {
+        const { phone } = req.query;
 
+        if (!phone) {
+            return res.status(400).json({ message: 'Phone number is required' });
+        }
+
+        // Clean phone number (ลบขีดและเว้นวรรคออก)
+        const cleanPhone = phone.replace(/[^0-9]/g, '');
+
+        if (cleanPhone.length < 3) {
+             return res.json({ message: 'success', data: [] });
+        }
+
+        const sql = `
+            SELECT 
+                caseId as jobId,
+                caseType as type,
+                CONCAT(caseBrand, ' ', caseModel) as device,
+                caseStatus as statusStr,
+                created_at,
+                updated_at,
+                brokenSymptom
+            FROM caseRepair 
+            WHERE REPLACE(REPLACE(cusPhone, '-', ''), ' ', '') LIKE ? 
+            ORDER BY updated_at DESC, created_at DESC
+        `;
+
+        const [rows] = await database.query(sql, [`%${cleanPhone}%`]);
+
+        // ปรับ Map Status ให้ตรงกับ 6 สเต็ปในหน้า UI ของลูกค้า
+        // 0=รอรับเครื่อง, 1=รับเครื่องแล้ว, 2=รออะไหล่, 3=กำลังซ่อม/ส่งซ่อมอยู่, 4=ซ่อมเสร็จ, 5=ส่งมอบ, -1=ยกเลิก
+        const statusMap = (status) => {
+            if (!status) return 0;
+            if (status === 'รอรับเครื่อง') return 0;
+            if (status === 'รับเครื่องแล้ว') return 1;
+            if (status.includes('รออะไหล่') || status.includes('รอสินค้า')) return 2;
+            if (status.includes('กำลังซ่อม') || status.includes('ส่งซ่อม')) return 3;
+            if (status.includes('ซ่อมเสร็จ')) return 4;
+            if (status.includes('ส่งมอบ')) return 5;
+            if (status === 'ยกเลิก') return -1;
+            return 0; // Default
+        };
+
+        const results = rows.map(row => {
+            // ดักจับและซ่อนคำว่า "ส่งซ่อม" ให้ลูกค้าเห็นเป็น "กำลังซ่อม"
+            let displayStatus = row.statusStr;
+            if (displayStatus && displayStatus.includes('ส่งซ่อม')) {
+                displayStatus = 'กำลังซ่อม';
+            }
+
+            return {
+                jobId: row.jobId,
+                type: row.type,
+                device: row.device || row.type, // Fallback ถ้าไม่มี Brand/Model
+                currentStatus: statusMap(row.statusStr), // ส่ง Index 0-5 หรือ -1 ไปให้ UI จัดการ
+                displayStatus: displayStatus, // ใช้ข้อความที่ถูกกรองแล้วส่งไปแสดงผล
+                
+                // แปลงเวลาให้เป็นโซนเวลาไทย
+                lastUpdate: new Date(row.updated_at || row.created_at).toLocaleString('th-TH', { 
+                    day: '2-digit', month: '2-digit', year: 'numeric', 
+                    hour: '2-digit', minute: '2-digit',
+                    timeZone: 'Asia/Bangkok' 
+                }) + ' น.',
+                symptom: row.brokenSymptom
+            };
+        });
+
+        res.json({ message: 'success', data: results });
+
+    } catch (error) {
+        console.error('Error tracking:', error);
+        res.status(500).json({ message: 'error', error: error.message });
+    }
+}

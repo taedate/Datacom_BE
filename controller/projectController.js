@@ -1,6 +1,8 @@
 import database from "../service/database.js";
 import { postToFacebook } from "../service/facebookService.js";
 import path from 'path';
+import sharp from 'sharp';
+import fs from 'fs';
 
 // 1. ดึงข้อมูลลงตาราง (Search + Filter + Pagination)
 export async function getProjectInfo(req, res) {
@@ -134,6 +136,26 @@ export async function updateProject(req, res) {
 
         // 2. จัดการรูปภาพใหม่
         if (req.files && req.files.length > 0) {
+            // Compress each uploaded file
+            await Promise.all(req.files.map(async (file) => {
+                try {
+                    // Use a temporary file path
+                    const tempPath = file.path + '.tmp';
+                    
+                    // Resize to max width 1920px, convert to JPEG with 80% quality
+                    await sharp(file.path)
+                        .resize({ width: 1920, withoutEnlargement: true })
+                        .jpeg({ quality: 80, progressive: true }) 
+                        .toFile(tempPath);
+
+                    // Overwrite the original file with the compressed one
+                    fs.renameSync(tempPath, file.path);
+                } catch (err) {
+                    console.error(`Failed to compress image ${file.filename}:`, err);
+                    // If compression fails, we keep the original file
+                }
+            }));
+
             const newPaths = req.files.map(file => {
                 return `uploads/projects/${pId}/${file.filename}`;
             });
