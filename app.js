@@ -25,7 +25,8 @@ app.use(cors({
     origin: [
         'http://localhost:5173', 
         'http://127.0.0.1:5173',
-        'https://employeedatacom.datacom-service.com' // Domain Frontend
+        'https://employeedatacom.datacom-service.com',
+        'https://datacom-service.com' // Domain Frontend
     ],
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS']
