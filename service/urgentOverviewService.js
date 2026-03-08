@@ -232,9 +232,13 @@ function sortUrgentItems(items) {
 }
 
 function buildSummary(items, warnDays) {
-    const warning = items.filter((item) => item.urgencyLevel === 'warning').length;
+    // Match FE summary logic:
+    // warning  = ageDays > warnDays
+    // critical = ageDays > criticalDays (subset of warning)
+    // followToday = warning + critical
+    const warning = items.filter((item) => item.ageDays > warnDays).length;
     const critical = items.filter((item) => item.urgencyLevel === 'critical').length;
-    const followToday = items.filter((item) => item.ageDays > warnDays).length;
+    const followToday = warning + critical;
 
     return {
         total: items.length,
