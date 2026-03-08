@@ -12,6 +12,9 @@ import projectRouter from './router/projectRouter.js';
 import sentRepairRouter from './router/sentRepairRouter.js';
 import dashboardRouter from './router/dashboardRouter.js';
 import quotationRouter from './router/quotationRouter.js';
+import urgentOverviewRouter from './router/urgentOverviewRouter.js';
+import lineBotRouter from './router/lineBotRouter.js';
+import { startLineDigestJob } from './service/lineDigestJob.js';
 
 // --- Config สำหรับ ES Modules ---
 const __filename = fileURLToPath(import.meta.url);
@@ -38,7 +41,12 @@ app.use(helmet({
     crossOriginResourcePolicy: { policy: "cross-origin" }
 }));
 app.use(compression());
-app.use(express.json());
+app.use(express.json({
+    verify: (req, _res, buf) => {
+        // Keep raw body for webhook signature validation (e.g. LINE callback).
+        req.rawBody = buf;
+    }
+}));
 
 // --- 3. เปิดให้เข้าถึงโฟลเดอร์รูปภาพ (Static Files) ---
 // สำคัญ: ต้องมีโฟลเดอร์ชื่อ 'uploads' อยู่ในระดับเดียวกับไฟล์นี้
@@ -51,6 +59,11 @@ app.use(projectRouter);
 app.use(sentRepairRouter);
 app.use(dashboardRouter);
 app.use(quotationRouter);
+app.use(urgentOverviewRouter);
+app.use(lineBotRouter);
+
+// --- 6. Background Jobs ---
+startLineDigestJob();
 
 // --- Start Server ---
 app.listen(port, function () {
