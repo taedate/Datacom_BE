@@ -95,8 +95,26 @@ async function handleEvent(event) {
         'คำถามอื่นๆ',
         'แผนที่',
         'ติดต่อเรา',
-        'ยกเลิก'
+        'ยกเลิก',
+        'เช็คไอดีกลุ่ม'
     ]);
+
+    if (text === 'เช็คไอดีกลุ่ม') {
+        const sourceType = event.source?.type;
+
+        if (sourceType === 'group') {
+            await replyMessage(event.replyToken, textMessage(`Group ID: ${event.source.groupId || '-'}`));
+            return;
+        }
+
+        if (sourceType === 'room') {
+            await replyMessage(event.replyToken, textMessage(`Room ID: ${event.source.roomId || '-'}`));
+            return;
+        }
+
+        await replyMessage(event.replyToken, textMessage(`User ID: ${event.source?.userId || '-'}`));
+        return;
+    }
 
     if (isSundayBangkok() && !allowedOnSunday.has(text)) {
         clearUserFlow(userId);
