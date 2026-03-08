@@ -266,20 +266,7 @@ async function handleIdle(event, text, userId) {
         return;
     }
 
-    const qr = buildQuickReply([
-        { label: 'แจ้งซ่อม', text: 'แจ้งซ่อม' },
-        { label: 'สั่งซื้อหน่วยงาน', text: 'สั่งซื้อหน่วยงาน' },
-        { label: 'สอบถามสินค้า', text: 'สอบถามสินค้า' },
-        { label: 'ช่วยเหลือ', text: 'ช่วยเหลือ' },
-        { label: 'ติดต่อเรา', text: 'ติดต่อเรา' }
-    ]);
-
-    const greetingText = [
-        'สวัสดีครับ Datacom Service ยินดีให้บริการครับ',
-        'คุณลูกค้าต้องการให้เราดูแลเรื่องไหน สามารถเลือกเมนูด้านล่างได้เลยครับ'
-    ].join('\n');
-
-    await replyMessage(event.replyToken, textMessage(greetingText, qr));
+    // Ignore unmatched text in IDLE state.
 }
 
 async function handleCheckStatus(event, text, userId) {
