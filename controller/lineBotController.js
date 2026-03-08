@@ -116,11 +116,7 @@ async function handleEvent(event) {
         return;
     }
 
-    if (isSundayBangkok() && !allowedOnSunday.has(text)) {
-        clearUserFlow(userId);
-        await replyMessage(event.replyToken, createClosedSundayFlex());
-        return;
-    }
+    // Sunday blocking is disabled: allow normal chatbot flow every day.
 
     if (text === 'ยกเลิก') {
         setState(userId, 'IDLE');
