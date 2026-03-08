@@ -3,6 +3,7 @@ import express from 'express';
 import { 
     getQuotationById, 
     getAllQuotations,
+    suggestQuotationCustomers,
     createQuotation, 
     updateQuotation, 
     deleteQuotation 
@@ -12,6 +13,7 @@ const router = express.Router();
 
 // Define routes
 router.get("/get-quotation-info", getAllQuotations);
+router.get('/quotation/customers/suggest', suggestQuotationCustomers);
 router.get('/quotation/:id', getQuotationById);
 router.post('/quotation', createQuotation);
 router.put('/quotation/:id', updateQuotation);

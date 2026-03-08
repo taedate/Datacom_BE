@@ -15,3 +15,7 @@ CREATE INDEX IF NOT EXISTS idx_caseProject_pStatus ON caseProject (pStatus(50));
 -- Fulltext indexes (optional, improve search on text columns). Only apply if your MySQL supports FULLTEXT on InnoDB.
 -- ALTER TABLE caseRepair ADD FULLTEXT idx_caseRepair_search (cusFirstName, cusLastName, caseBrand, caseModel, caseSN, brokenSymptom);
 -- ALTER TABLE caseSentRepair ADD FULLTEXT idx_caseSentRepair_search (caseSCusName, caseSToMechanic, caseSOrderNo, caseSSN, brokenSymptom);
+
+-- Quotation customer autocomplete
+CREATE INDEX IF NOT EXISTS idx_documents_customer_name ON documents (customer_name(191));
+CREATE INDEX IF NOT EXISTS idx_documents_updated_at ON documents (updated_at);

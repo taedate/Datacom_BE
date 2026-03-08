@@ -4,6 +4,66 @@ import database from "../service/database.js";
 const cleanVal = (val) => (val === "" || val === undefined || val === "null" ? null : val);
 
 // --------------------------------------------------------------------------
+// 0. CUSTOMER SUGGEST (Autocomplete)
+// --------------------------------------------------------------------------
+export async function suggestQuotationCustomers(req, res) {
+    try {
+        const rawQ = req.query.q;
+        if (typeof rawQ !== 'string') {
+            return res.status(400).json({ message: 'error', error: 'q is required' });
+        }
+
+        const q = rawQ.trim();
+        if (!q) {
+            return res.status(400).json({ message: 'error', error: 'q is required' });
+        }
+
+        const requestedLimit = Number(req.query.limit);
+        const limit = Number.isFinite(requestedLimit)
+            ? Math.max(1, Math.min(20, Math.floor(requestedLimit)))
+            : 10;
+
+        const sql = `
+            SELECT
+                x.customerName,
+                x.customerTaxId,
+                x.customerPhone,
+                x.customerAddress,
+                x.lastUsedAt
+            FROM (
+                SELECT
+                    TRIM(d.customer_name) AS customerName,
+                    d.customer_tax_id AS customerTaxId,
+                    d.customer_phone AS customerPhone,
+                    d.customer_address AS customerAddress,
+                    COALESCE(d.updated_at, d.issue_date, d.created_at) AS lastUsedAt,
+                    ROW_NUMBER() OVER (
+                        PARTITION BY LOWER(TRIM(d.customer_name))
+                        ORDER BY COALESCE(d.updated_at, d.issue_date, d.created_at) DESC, d.id DESC
+                    ) AS rn,
+                    CASE
+                        WHEN LOWER(TRIM(d.customer_name)) LIKE CONCAT(LOWER(?), '%') THEN 2
+                        ELSE 1
+                    END AS matchPriority
+                FROM documents d
+                WHERE d.customer_name IS NOT NULL
+                  AND TRIM(d.customer_name) <> ''
+                  AND LOWER(d.customer_name) LIKE CONCAT('%', LOWER(?), '%')
+            ) x
+            WHERE x.rn = 1
+            ORDER BY x.matchPriority DESC, x.lastUsedAt DESC
+            LIMIT ?
+        `;
+
+        const [rows] = await database.query(sql, [q, q, limit]);
+        return res.status(200).json({ data: rows || [] });
+    } catch (error) {
+        console.error('suggestQuotationCustomers Error:', error);
+        return res.status(500).json({ message: 'error', error: 'Internal server error' });
+    }
+}
+
+// --------------------------------------------------------------------------
 // 1. GET ALL QUOTATIONS (Optimized for List View)
 // --------------------------------------------------------------------------
 export async function getAllQuotations(req, res) {
