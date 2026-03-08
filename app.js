@@ -62,6 +62,10 @@ app.use(quotationRouter);
 app.use(urgentOverviewRouter);
 app.use(lineBotRouter);
 
+app.post('/__deploy-check', (req, res) => {
+  res.status(200).json({ ok: true, ts: new Date().toISOString() });
+});
+
 // --- 6. Background Jobs ---
 startLineDigestJob();
 
