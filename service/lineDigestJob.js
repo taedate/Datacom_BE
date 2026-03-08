@@ -13,11 +13,11 @@ async function wait(ms) {
 }
 
 async function pushLineMessage(text) {
-    const token = process.env.LINE_CHANNEL_ACCESS_TOKEN;
+    const token = process.env.LINE_CHANNEL_ACCESS_TOKEN || process.env.CHANNEL_ACCESS_TOKEN;
     const targetId = process.env.LINE_TARGET_ID;
 
     if (!token || !targetId) {
-        console.warn('LINE digest skipped: LINE_CHANNEL_ACCESS_TOKEN or LINE_TARGET_ID is missing.');
+        console.warn('LINE digest skipped: LINE token or LINE_TARGET_ID is missing.');
         return { success: false, reason: 'missing_env' };
     }
 

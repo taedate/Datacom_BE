@@ -5,5 +5,6 @@ const router = express.Router();
 
 router.post('/callback', lineBotController.callback);
 router.get('/imagemap/help/:size', lineBotController.serveHelpImagemap);
+router.post('/line/digest-now', lineBotController.triggerDigestNow);
 
 export default router;

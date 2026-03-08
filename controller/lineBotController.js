@@ -13,6 +13,7 @@ import {
     findRepairStatus,
     formatRepairStatusReply
 } from '../service/lineBotService.js';
+import { runLineDigestNow } from '../service/lineDigestJob.js';
 
 const sessions = new Map();
 const userData = new Map();
@@ -71,6 +72,28 @@ export async function serveHelpImagemap(req, res) {
     } catch (error) {
         console.error(error.message);
         return res.status(error.statusCode || 500).send('Not Found');
+    }
+}
+
+export async function triggerDigestNow(req, res) {
+    try {
+        const expectedKey = process.env.DIGEST_TRIGGER_KEY;
+        if (expectedKey) {
+            const providedKey = req.headers['x-digest-key'] || req.query.key;
+            if (providedKey !== expectedKey) {
+                return res.status(401).json({ message: 'Unauthorized' });
+            }
+        }
+
+        const output = await runLineDigestNow();
+        return res.status(200).json({
+            message: output?.result?.success ? 'sent' : 'failed',
+            result: output?.result,
+            digest: output?.digest
+        });
+    } catch (error) {
+        console.error('triggerDigestNow error:', error);
+        return res.status(500).json({ message: 'Internal Server Error' });
     }
 }
 
