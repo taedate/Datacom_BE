@@ -41,13 +41,26 @@ function getBangkokTodayString() {
 function parseToYmd(value) {
     if (!value) return null;
 
+    const normalizeYear = (year) => (year > 2400 ? year - 543 : year);
+
     if (typeof value === 'string') {
-        const match = value.match(/^(\d{4})-(\d{2})-(\d{2})/);
-        if (match) return `${match[1]}-${match[2]}-${match[3]}`;
+        const isoLike = value.match(/^(\d{4})[-/](\d{2})[-/](\d{2})/);
+        if (isoLike) {
+            const year = normalizeYear(Number(isoLike[1]));
+            return `${year}-${isoLike[2]}-${isoLike[3]}`;
+        }
+
+        const dmyLike = value.match(/^(\d{1,2})[-/](\d{1,2})[-/](\d{4})/);
+        if (dmyLike) {
+            const day = Number(dmyLike[1]);
+            const month = Number(dmyLike[2]);
+            const year = normalizeYear(Number(dmyLike[3]));
+            return `${year}-${pad2(month)}-${pad2(day)}`;
+        }
 
         const fallbackDate = new Date(value);
         if (!Number.isNaN(fallbackDate.getTime())) {
-            const y = fallbackDate.getUTCFullYear();
+            const y = normalizeYear(fallbackDate.getUTCFullYear());
             const m = fallbackDate.getUTCMonth() + 1;
             const d = fallbackDate.getUTCDate();
             return `${y}-${pad2(m)}-${pad2(d)}`;
