@@ -3,8 +3,12 @@ import multer from 'multer';
 import path from 'path';
 import fs from 'fs';
 import * as pjCtrl from '../controller/projectController.js';
+import { auditEvent } from '../middleware/auditTrail.js';
+import { optionalAuthenticate } from '../middleware/authenticate.js';
 
 const router = express.Router();
+
+router.use(optionalAuthenticate);
 
 // --- Storage Config: เก็บลงโฟลเดอร์ PJ-XXX โดยตรง ---
 const storage = multer.diskStorage({
@@ -41,9 +45,31 @@ const upload = multer({ storage: storage });
 router.get('/get-project-info', pjCtrl.getProjectInfo);
 router.get('/get-project-detail/:id', pjCtrl.getProjectDetail);
 
-router.post('/create-project', upload.array('evidence_images', 10), pjCtrl.createProject); 
+router.post('/create-project', upload.array('evidence_images', 10), auditEvent({
+    module: 'project',
+    entityType: 'project',
+    successAction: 'PROJECT_CREATED',
+    failAction: 'PROJECT_CREATED',
+    failSeverity: 'warning',
+    entityIdResolver: ({ responseBody }) => responseBody?.pId || null,
+}), pjCtrl.createProject); 
 // ตอน update รูปจะวิ่งเข้าโฟลเดอร์ PJ-XXX ทันที
-router.post('/update-project', upload.array('evidence_images', 10), pjCtrl.updateProject); 
-router.post('/delete-project', pjCtrl.deleteProject);
+router.post('/update-project', upload.array('evidence_images', 10), auditEvent({
+    module: 'project',
+    entityType: 'project',
+    successAction: 'PROJECT_UPDATED',
+    failAction: 'PROJECT_UPDATED',
+    failSeverity: 'warning',
+    entityIdResolver: ({ req }) => req.body?.pId || null,
+    detailBuilder: ({ req }) => ({ newStatus: req.body?.pStatus || null }),
+}), pjCtrl.updateProject); 
+router.post('/delete-project', auditEvent({
+    module: 'project',
+    entityType: 'project',
+    successAction: 'PROJECT_DELETED',
+    failAction: 'PROJECT_DELETED',
+    failSeverity: 'warning',
+    entityIdResolver: ({ req }) => req.body?.pId || null,
+}), pjCtrl.deleteProject);
 
 export default router;

@@ -14,7 +14,13 @@ import dashboardRouter from './router/dashboardRouter.js';
 import quotationRouter from './router/quotationRouter.js';
 import urgentOverviewRouter from './router/urgentOverviewRouter.js';
 import lineBotRouter from './router/lineBotRouter.js';
+import inviteRouter from './router/inviteRouter.js';
+import auditLogRouter from './router/auditLogRouter.js';
 import { startLineDigestJob } from './service/lineDigestJob.js';
+import { requestContext } from './middleware/requestContext.js';
+import { auditFallback } from './middleware/auditTrail.js';
+import { startAuditRetentionJob } from './service/auditRetentionJob.js';
+import { optionalAuthenticate } from './middleware/authenticate.js';
 
 // --- Config สำหรับ ES Modules ---
 const __filename = fileURLToPath(import.meta.url);
@@ -22,6 +28,9 @@ const __dirname = path.dirname(__filename);
 
 const port = process.env.PORT || 3333;
 const app = express();
+
+// Trust first proxy (needed for accurate IP in express-rate-limit)
+app.set('trust proxy', 1);
 
 // --- 1. Config CORS ---
 app.use(cors({
@@ -48,6 +57,11 @@ app.use(express.json({
     }
 }));
 
+// Attach request metadata for consistent audit log records.
+app.use(requestContext);
+app.use(optionalAuthenticate);
+app.use(auditFallback());
+
 // --- 3. เปิดให้เข้าถึงโฟลเดอร์รูปภาพ (Static Files) ---
 // สำคัญ: ต้องมีโฟลเดอร์ชื่อ 'uploads' อยู่ในระดับเดียวกับไฟล์นี้
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
@@ -61,6 +75,8 @@ app.use(dashboardRouter);
 app.use(quotationRouter);
 app.use(urgentOverviewRouter);
 app.use(lineBotRouter);
+app.use(inviteRouter);
+app.use(auditLogRouter);
 
 app.post('/__deploy-check', (req, res) => {
   res.status(200).json({ ok: true, ts: new Date().toISOString() });
@@ -68,6 +84,7 @@ app.post('/__deploy-check', (req, res) => {
 
 // --- 6. Background Jobs ---
 startLineDigestJob();
+startAuditRetentionJob();
 
 // --- Start Server ---
 app.listen(port, function () {

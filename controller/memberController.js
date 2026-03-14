@@ -1,52 +1,24 @@
-import database from "../service/database.js"; // ตรวจสอบ path ให้ถูกว่าไฟล์ database.js อยู่ไหน
+import database from "../service/database.js";
 import bcrypt from 'bcrypt';
 import jwt from 'jsonwebtoken';
+import { writeAuditLog } from '../service/auditLogService.js';
 
-const secret = 'DaranWeb';
+const secret = process.env.JWT_SECRET || 'DaranWeb';
 
-// --- REGISTER ---
+// --- REGISTER (disabled: use /register-by-invite) ---
 export async function memberRegister(req, res) {
-  try {
-    // รับค่า userName และ password (ตัด fname, lname ออกเพราะใน DB ไม่มีที่เก็บ)
-    const { userName, password } = req.body;
-
-    // ตรวจสอบค่าว่าง
-    if (!userName || !password) {
-      return res.status(400).json({ error: 'Missing required fields (userName, password)' });
-    }
-
-    const saltRounds = 10;
-    const hash = await bcrypt.hash(password, saltRounds);
-
-    // SQL สำหรับ MySQL:
-    // 1. ใช้เครื่องหมาย ? แทน $1
-    // 2. ไม่ต้องใส่ " ฟันหนูที่ชื่อ column
-    // 3. userId เป็น Auto Increment ไม่ต้องใส่ใน insert
-    const sql = 'INSERT INTO users (userName, userPassword) VALUES (?, ?)';
-    
-    // MySQL2 จะ return ผลลัพธ์เป็น array [result, fields]
-    const [result] = await database.query(sql, [userName, hash]);
-
-    console.log(result); 
-
-    res.status(201).json({ 
-        message: 'User registered successfully',
-        userId: result.insertId // ส่ง ID ที่เพิ่งสร้างกลับไปให้ด้วย (MySQL ทำได้)
+    return res.status(403).json({
+        message: 'error',
+        code: 'FORBIDDEN',
+        detail: 'Public registration is disabled. Use an invite link to register.',
     });
-
-  } catch (error) {
-    console.error('Error querying database:', error);
-    res.status(500).json({ error: 'Internal server error' });
-  }
 };
 
 // --- LOGIN ---
 export async function memberLogin(req, res) {
-  console.log('Member Login');
   try {
     // รับค่า userName แทน email
     const { userName, password } = req.body;
-    console.log(userName, password);
 
     // Query หา user จาก userName
     // สังเกตการใช้ Destructuring [rows] เพราะ mysql2 return เป็น array ของ rows
@@ -63,19 +35,29 @@ export async function memberLogin(req, res) {
     const loginok = await bcrypt.compare(password, user.userPassword);
 
     if (loginok) {
-      const token = jwt.sign({ userName: user.userName, userId: user.userId }, secret);
-      
-      // ✅ แก้ไขตรงนี้: ส่งข้อมูล User กลับไปพร้อมกับ Token
+      // Update lastLoginAt
+      await database.query(
+        'UPDATE users SET lastLoginAt = NOW(), updatedAt = NOW() WHERE userId = ?',
+        [user.userId]
+      );
+
+      const token = jwt.sign(
+        { userName: user.userName, userId: user.userId, role: user.role || 'user' },
+        secret,
+        { expiresIn: '8h' }
+      );
+
       return res.json({
         message: 'success',
         token,
         payload: {
-            userId: user.userId,
-            userName: user.userName
+            userId:   user.userId,
+            userName: user.userName,
+            role:     user.role || 'user',
         }
       });
     } else {
-      return res.status(401).json({ error: 'fail' });
+      return res.status(401).json({ message: 'error', code: 'FORBIDDEN', detail: 'Invalid credentials' });
     }
 
   } catch (error) {
@@ -134,6 +116,28 @@ export async function systemHealthCheck(req, res) {
 
   } catch (error) {
     console.error('Health Check Error:', error);
+    req.__auditLogged = true;
+    try {
+      await writeAuditLog({
+        performedBy: null,
+        action: 'HEALTHCHECK_FAILED',
+        module: 'system',
+        entityType: null,
+        entityId: null,
+        status: 'fail',
+        severity: 'error',
+        detail: {
+          route: req.originalUrl,
+          method: req.method,
+          reason: 'Database connection failed',
+        },
+        ipAddress: req.clientIp || req.ip || null,
+        userAgent: req.userAgent || req.headers['user-agent'] || null,
+        requestId: req.requestId || null,
+      });
+    } catch (auditError) {
+      console.error('Health check audit log failed:', auditError.message);
+    }
     // ถ้า DB ล่ม หรือต่อไม่ได้ จะส่ง Error 500 กลับไป
     res.status(500).json({ 
       status: 'offline', 
