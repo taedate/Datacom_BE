@@ -9,7 +9,7 @@ export async function getSentRepairInfo(req, res) {
         const { page = 1, itemsPerPage = 10, search, caseSType, dateRange, sort_by, sort_order, status, lastDate } = req.query;
         const offset = (page - 1) * itemsPerPage;
         const limit = Number(itemsPerPage) || 10;
-        let sql = `SELECT caseSId, caseSToMechanic, caseSOrderNo, caseSCusName, DateSOfSent, caseSType, caseSBrand, caseSModel, caseSSN, brokenSymptom, caseSEquipment, dateOfReceived, caseSRecipient, created_at FROM caseSentRepair WHERE 1=1`;
+        let sql = `SELECT caseSId, caseSToMechanic, caseSOrderNo, caseSCusName, DateSOfSent, caseSType, caseSBrand, caseSModel, caseSSN, brokenSymptom, caseSEquipment, dateOfReceived, caseSRecipient, created_at, (SELECT caseId FROM caseRepair WHERE refSentRepairId COLLATE utf8mb4_unicode_ci = caseSentRepair.caseSId COLLATE utf8mb4_unicode_ci LIMIT 1) AS refCaseId FROM caseSentRepair WHERE 1=1`;
         let countSql = `SELECT COUNT(*) as total FROM caseSentRepair WHERE 1=1`;
         let params = [];
 
@@ -46,13 +46,16 @@ export async function getSentRepairInfo(req, res) {
         const [countResult] = await database.query(countSql, params);
         
         res.json({ message: 'success', data: rows, totalItems: countResult[0].total, totalPages: Math.ceil(countResult[0].total / itemsPerPage) });
-    } catch (error) { res.status(500).json({ error: 'Internal server error' }); }
+    } catch (error) { 
+        console.error("GET INFO ERROR:", error);
+        res.status(500).json({ error: error.message }); 
+    }
 }
 
 export async function getSentRepairDetail(req, res) {
     try {
         const { id } = req.params;
-        const [rows] = await database.query('SELECT * FROM caseSentRepair WHERE caseSId = ?', [id]);
+        const [rows] = await database.query('SELECT caseSId, caseSToMechanic, caseSOrderNo, caseSCusName, DateSOfSent, caseSType, caseSBrand, caseSModel, caseSSN, brokenSymptom, caseSEquipment, dateOfReceived, caseSRecipient, created_at, (SELECT caseId FROM caseRepair WHERE refSentRepairId COLLATE utf8mb4_unicode_ci = caseSentRepair.caseSId COLLATE utf8mb4_unicode_ci LIMIT 1) AS refCaseId FROM caseSentRepair WHERE caseSId = ?', [id]);
         if (rows.length === 0) return res.status(404).json({ message: 'error', error: 'Case not found' });
         res.json({ message: 'success', data: rows[0] });
     } catch (error) { res.status(500).json({ message: 'error', error: error.message }); }
@@ -133,6 +136,14 @@ export async function updateSentRepair(req, res) {
         const { caseSId, caseSToMechanic, caseSOrderNo, caseSCusName, DateSOfSent, caseSType, caseSBrand, caseSModel, caseSSN, brokenSymptom, caseSEquipment, dateOfReceived, caseSRecipient } = req.body;
         const sql = `UPDATE caseSentRepair SET caseSToMechanic=?, caseSOrderNo=?, caseSCusName=?, DateSOfSent=?, caseSType=?, caseSBrand=?, caseSModel=?, caseSSN=?, brokenSymptom=?, caseSEquipment=?, dateOfReceived=?, caseSRecipient=? WHERE caseSId=?`;
         await database.query(sql, [caseSToMechanic || '', caseSOrderNo || '', caseSCusName || '', DateSOfSent || null, caseSType || '', caseSBrand || '', caseSModel || '', caseSSN || '', brokenSymptom || '', caseSEquipment || '', dateOfReceived || null, caseSRecipient || '', caseSId]);
+        
+        // Auto-sync status back to the main CaseRepair
+        if (dateOfReceived && dateOfReceived !== '' && dateOfReceived !== 'null') {
+             const updateCaseSql = `UPDATE caseRepair SET caseStatus = 'ซ่อมเสร็จ', dateComplete = ? WHERE refSentRepairId COLLATE utf8mb4_unicode_ci = ?`;
+             const [result] = await database.query(updateCaseSql, [dateOfReceived, caseSId]);
+             console.log(`Auto-Sync CaseRepair Result for ${caseSId}:`, result.affectedRows, "rows affected.");
+        }
+        
         res.json({ message: 'success' });
     } catch (error) { res.status(500).json({ message: 'error', error: error.message }); }
 }
