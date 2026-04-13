@@ -4,6 +4,9 @@ import {
     getQuotationById, 
     getAllQuotations,
     suggestQuotationCustomers,
+    getNextQuotationDocId,
+    getNextDeliveryDocId,
+    getPriceHistory,
     createQuotation, 
     updateQuotation, 
     deleteQuotation 
@@ -18,6 +21,9 @@ router.use(optionalAuthenticate);
 // Define routes
 router.get("/get-quotation-info", getAllQuotations);
 router.get('/quotation/customers/suggest', suggestQuotationCustomers);
+router.get('/quotation/next-doc-id', getNextQuotationDocId);
+router.get('/quotation/next-delivery-id', getNextDeliveryDocId);
+router.get('/quotation/price-history', getPriceHistory);
 router.get('/quotation/:id', getQuotationById);
 router.post('/quotation', auditEvent({
     module: 'quotation',

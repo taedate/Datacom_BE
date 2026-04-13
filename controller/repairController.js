@@ -1,5 +1,39 @@
 import database from "../service/database.js";
 
+// Helper: แมปสถานะ -> คอลัมน์วันที่ในฐานข้อมูล
+function getStatusDateColumn(status) {
+    const map = {
+        'รอรับเครื่อง':   'statusDateWaiting',
+        'รับเครื่องแล้ว':  'statusDateReceived',
+        'รออะไหล่':       'statusDateWaitPart',
+        'รอสินค้า':       'statusDateWaitPart',
+        'กำลังซ่อม':      'statusDateRepairing',
+        'ส่งซ่อมอยู่':     'statusDateRepairing',
+        'ซ่อมเสร็จ':      'statusDateComplete',
+        'ส่งมอบ':         'statusDateDelivered',
+    };
+    const col = map[status] || null;
+    return {
+        column: col,
+        // สำหรับ INSERT: เพิ่มชื่อคอลัมน์ + ค่า NOW()
+        sqlColumn: col ? `, ${col}` : '',
+        sqlValue: col ? ', NOW()' : '',
+        // สำหรับ UPDATE: เพิ่ม SET clause
+        sqlUpdate: col ? `, ${col}=NOW()` : '',
+    };
+}
+
+// Helper: แปลง Date เป็นรูปแบบไทย (คืน null ถ้าแปลงไม่ได้)
+function formatThaiDate(dateValue) {
+    const d = new Date(dateValue);
+    if (isNaN(d.getTime())) return null;
+    return d.toLocaleString('th-TH', {
+        day: '2-digit', month: '2-digit', year: 'numeric',
+        hour: '2-digit', minute: '2-digit',
+        timeZone: 'Asia/Bangkok'
+    }) + ' น.';
+}
+
 export async function getCaseInfo(req, res) {
     try {
         const { page = 1, itemsPerPage = 10, search, caseStatus, caseType, dateRange, sort_by, sort_order, lastDate } = req.query;
@@ -154,6 +188,7 @@ export async function createCase(req, res) {
         } = req.body;
 
         // 1. กำหนด Prefix ตามประเภท
+        console.log("Create Case Request Type:", caseType, "| Length:", caseType ? caseType.length : 0);
         let prefix = "CT"; 
         switch (caseType) {
             case "ซ่อมคอมพิวเตอร์": prefix = "PC"; break;
@@ -161,6 +196,10 @@ export async function createCase(req, res) {
             case "ซ่อมปริ้นเตอร์": prefix = "PR"; break;
             case "ซ่อมมือถือ/แท็บเล็ต": prefix = "MB"; break;
             case "ลงโปรแกรม/OS": prefix = "SW"; break;
+            case "UPS": prefix = "UP"; break;
+            case "เปลี่ยนอะไหล่": prefix = "SP"; break; // SP = Spare Part
+            case "กู้ข้อมูล": prefix = "DR"; break;   // DR = Data Recovery
+            case "อื่นๆ": prefix = "OT"; break;       // OT = Other
             default: prefix = "CT";
         }
 
@@ -178,17 +217,22 @@ export async function createCase(req, res) {
             newId = `${prefix}-${String(lastNum + 1).padStart(3, '0')}`;
         }
 
-        // 4. บันทึก (ใส่ NOW() ใน created_at)
+        // 4. กำหนด statusDate ตามสถานะเริ่มต้น
+        const initialStatus = caseStatus || 'รับเครื่องแล้ว';
+        const statusDateColumns = getStatusDateColumn(initialStatus);
+
+        // 5. บันทึก (ใส่ NOW() ใน created_at + statusDate)
         const sql = `INSERT INTO caseRepair 
         (caseId, cusFirstName, cusLastName, cusPhone, caseInstitution, 
          brokenSymptom, caseType, caseStatus, 
          caseBrand, caseModel, caseSN, caseDurableArticles, caseEquipment,
-         datePickUp, dateBeforePicUp, dateComplete, dateDelivered, created_at) 
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())`;
+         datePickUp, dateBeforePicUp, dateComplete, dateDelivered, 
+         created_at${statusDateColumns.sqlColumn}) 
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW()${statusDateColumns.sqlValue})`;
 
         await database.query(sql, [
             newId, cusFirstName, cusLastName, cusPhone, caseInstitution || '',
-            brokenSymptom, caseType, caseStatus || 'รับเครื่องแล้ว',
+            brokenSymptom, caseType, initialStatus,
             caseBrand || '', caseModel || '', caseSN || '', caseDurableArticles || '', caseEquipment || '',
             datePickUp || null, dateBeforePicUp || null, dateComplete || null, dateDelivered || null
         ]);
@@ -207,23 +251,35 @@ export async function updateCase(req, res) {
             caseId, cusFirstName, cusLastName, cusPhone, caseInstitution,
             brokenSymptom, caseType, caseStatus,
             caseBrand, caseModel, caseSN, caseDurableArticles, 
-            caseEquipment, // ✅ เพิ่มตรงนี้
+            caseEquipment,
             datePickUp, dateBeforePicUp, dateComplete, dateDelivered
         } = req.body;
+
+        // ตรวจสอบว่าสถานะเปลี่ยนหรือไม่ เพื่อ auto-set statusDate
+        const [currentRows] = await database.query('SELECT caseStatus FROM caseRepair WHERE caseId = ?', [caseId]);
+        const oldStatus = currentRows.length > 0 ? currentRows[0].caseStatus : null;
+        const statusChanged = oldStatus !== caseStatus;
+
+        // สร้าง SQL แบบ dynamic: ถ้าสถานะเปลี่ยนจะ set statusDate ด้วย
+        let statusDateSql = '';
+        if (statusChanged && caseStatus) {
+            const col = getStatusDateColumn(caseStatus);
+            statusDateSql = col.sqlUpdate;
+        }
 
         const sql = `UPDATE caseRepair SET 
             cusFirstName=?, cusLastName=?, cusPhone=?, caseInstitution=?,
             brokenSymptom=?, caseType=?, caseStatus=?,
             caseBrand=?, caseModel=?, caseSN=?, caseDurableArticles=?, caseEquipment=?,
             datePickUp=?, dateBeforePicUp=?, dateComplete=?, dateDelivered=?,
-            updated_at=NOW()
+            updated_at=NOW()${statusDateSql}
             WHERE caseId=?`;
 
         await database.query(sql, [
             cusFirstName, cusLastName, cusPhone, caseInstitution || '',
             brokenSymptom, caseType, caseStatus,
             caseBrand || '', caseModel || '', caseSN || '', caseDurableArticles || '', 
-            caseEquipment || '', // ✅ เพิ่มค่า
+            caseEquipment || '',
             datePickUp || null, dateBeforePicUp || null, dateComplete || null, dateDelivered || null,
             caseId
         ]);
@@ -259,11 +315,17 @@ export async function getTrackingByPhone(req, res) {
                 CONCAT(caseBrand, ' ', caseModel) as device,
                 caseStatus as statusStr,
                 created_at,
-                updated_at,
+                IF(YEAR(updated_at) = 0 OR updated_at IS NULL, created_at, updated_at) as last_updated,
+                statusDateWaiting,
+                statusDateReceived,
+                statusDateWaitPart,
+                statusDateRepairing,
+                statusDateComplete,
+                statusDateDelivered,
                 brokenSymptom
             FROM caseRepair 
             WHERE REPLACE(REPLACE(cusPhone, '-', ''), ' ', '') LIKE ? 
-            ORDER BY updated_at DESC, created_at DESC
+            ORDER BY last_updated DESC
         `;
 
         const [rows] = await database.query(sql, [`%${cleanPhone}%`]);
@@ -297,11 +359,17 @@ export async function getTrackingByPhone(req, res) {
                 displayStatus: displayStatus, // ใช้ข้อความที่ถูกกรองแล้วส่งไปแสดงผล
                 
                 // แปลงเวลาให้เป็นโซนเวลาไทย
-                lastUpdate: new Date(row.updated_at || row.created_at).toLocaleString('th-TH', { 
-                    day: '2-digit', month: '2-digit', year: 'numeric', 
-                    hour: '2-digit', minute: '2-digit',
-                    timeZone: 'Asia/Bangkok' 
-                }) + ' น.',
+                lastUpdate: row.last_updated ? formatThaiDate(row.last_updated) : '-',
+
+                // วันที่เปลี่ยนสถานะแต่ละขั้น (สำหรับ Stepper UI)
+                statusDates: {
+                    waiting: row.statusDateWaiting ? formatThaiDate(row.statusDateWaiting) : null,
+                    received: row.statusDateReceived ? formatThaiDate(row.statusDateReceived) : formatThaiDate(row.created_at),
+                    waitPart: row.statusDateWaitPart ? formatThaiDate(row.statusDateWaitPart) : null,
+                    repairing: row.statusDateRepairing ? formatThaiDate(row.statusDateRepairing) : null,
+                    complete: row.statusDateComplete ? formatThaiDate(row.statusDateComplete) : null,
+                    delivered: row.statusDateDelivered ? formatThaiDate(row.statusDateDelivered) : null,
+                },
                 symptom: row.brokenSymptom
             };
         });

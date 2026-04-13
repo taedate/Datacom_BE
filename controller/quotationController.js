@@ -4,7 +4,169 @@ import database from "../service/database.js";
 const cleanVal = (val) => (val === "" || val === undefined || val === "null" ? null : val);
 
 // --------------------------------------------------------------------------
-// 0. CUSTOMER SUGGEST (Autocomplete)
+// 0a. GENERATE NEXT QUOTATION DOC ID
+// --------------------------------------------------------------------------
+export async function getNextQuotationDocId(req, res) {
+    try {
+        const customerName = (req.query.customerName || '').trim();
+        if (!customerName) {
+            return res.status(400).json({ message: 'error', error: 'customerName is required' });
+        }
+
+        // ใช้เวลาไทย (UTC+7) เป็นหลัก
+        const now = new Date();
+        const bangkokTime = new Date(now.toLocaleString('en-US', { timeZone: 'Asia/Bangkok' }));
+
+        const ceYear = bangkokTime.getFullYear();           // ปี ค.ศ. เช่น 2026
+        const thaiYear = (ceYear + 543) % 100;              // ปี พ.ศ. 2 หลัก เช่น 69
+        const month = bangkokTime.getMonth() + 1;           // เดือน 1-12
+
+        const thaiYearStr = String(thaiYear).padStart(2, '0');
+        const monthStr = String(month).padStart(2, '0');
+
+        // นับจำนวนเอกสารของลูกค้ารายนี้ในเดือนนี้
+        const startOfMonth = `${ceYear}-${monthStr}-01 00:00:00`;
+        const nextMonthDate = new Date(ceYear, month, 1); // month is already 1-indexed, so this gives first day of next month
+        const nextMonthStr = `${nextMonthDate.getFullYear()}-${String(nextMonthDate.getMonth() + 1).padStart(2, '0')}-01 00:00:00`;
+
+        const sql = `SELECT COUNT(*) as count FROM documents 
+                     WHERE LOWER(TRIM(customer_name)) = LOWER(TRIM(?))
+                     AND created_at >= ? AND created_at < ?`;
+
+        const [rows] = await database.query(sql, [customerName, startOfMonth, nextMonthStr]);
+
+        const count = rows[0].count;
+        const seq = String(count + 1).padStart(2, '0');
+
+        const docId = `DATA${thaiYearStr}-${monthStr}${seq}/${ceYear}`;
+
+        return res.json({ message: 'success', docId });
+    } catch (error) {
+        console.error('getNextQuotationDocId Error:', error);
+        return res.status(500).json({ message: 'error', error: 'Internal server error' });
+    }
+}
+
+// --------------------------------------------------------------------------
+// 0b. GENERATE NEXT DELIVERY NOTE ID (IV{ปีไทย}{เดือน}{ลำดับ 3 หลัก})
+// --------------------------------------------------------------------------
+export async function getNextDeliveryDocId(req, res) {
+    try {
+        // ใช้เวลาไทย (UTC+7)
+        const now = new Date();
+        const bangkokTime = new Date(now.toLocaleString('en-US', { timeZone: 'Asia/Bangkok' }));
+
+        const ceYear = bangkokTime.getFullYear();
+        const thaiYear = (ceYear + 543) % 100;
+        const month = bangkokTime.getMonth() + 1;
+
+        const thaiYearStr = String(thaiYear).padStart(2, '0');
+        const monthStr = String(month).padStart(2, '0');
+
+        // prefix ที่ต้อง match เช่น "IV6904"
+        const prefix = `IV${thaiYearStr}${monthStr}`;
+
+        // นับจำนวนเอกสารที่มี delivery_note_no ขึ้นต้นด้วย prefix นี้ (รวมทุกลูกค้า)
+        const sql = `SELECT COUNT(*) as count FROM documents
+                     WHERE delivery_note_no IS NOT NULL
+                     AND delivery_note_no LIKE CONCAT(?, '%')`;
+
+        const [rows] = await database.query(sql, [prefix]);
+
+        const count = rows[0].count;
+        const seq = String(count + 1).padStart(3, '0');
+
+        const docId = `${prefix}${seq}`;
+
+        return res.json({ message: 'success', docId });
+    } catch (error) {
+        console.error('getNextDeliveryDocId Error:', error);
+        return res.status(500).json({ message: 'error', error: 'Internal server error' });
+    }
+}
+
+// --------------------------------------------------------------------------
+// 0c. PRICE HISTORY (ค้นหาประวัติราคาสินค้าแต่ละหน่วยงาน)
+// --------------------------------------------------------------------------
+export async function getPriceHistory(req, res) {
+    try {
+        const { page = 1, itemsPerPage = 15, customerName, productName, sort_by, sort_order } = req.query;
+        const offset = (page - 1) * itemsPerPage;
+        const limit = Number(itemsPerPage) || 15;
+
+        let sql = `
+            SELECT 
+                d.id as document_id,
+                d.quotation_id,
+                d.customer_name,
+                d.issue_date,
+                d.issue_date_str,
+                d.created_at,
+                d.updated_at,
+                d.current_status,
+                ds.section_name,
+                di.description as product_name,
+                di.quantity,
+                di.unit,
+                di.unit_price
+            FROM document_items di
+            JOIN document_sections ds ON ds.id = di.section_id
+            JOIN documents d ON d.id = ds.document_id
+            WHERE 1=1
+        `;
+
+        let countSql = `
+            SELECT COUNT(*) as total 
+            FROM document_items di
+            JOIN document_sections ds ON ds.id = di.section_id
+            JOIN documents d ON d.id = ds.document_id
+            WHERE 1=1
+        `;
+
+        let params = [];
+
+        if (customerName) {
+            const cond = ` AND d.customer_name LIKE ?`;
+            sql += cond;
+            countSql += cond;
+            params.push(`%${customerName}%`);
+        }
+
+        if (productName) {
+            const cond = ` AND di.description LIKE ?`;
+            sql += cond;
+            countSql += cond;
+            params.push(`%${productName}%`);
+        }
+
+        // Count
+        const countParams = [...params];
+        const [countRows] = await database.query(countSql, countParams);
+        const totalItems = countRows[0].total;
+
+        // Sorting
+        const allowedSort = {
+            'customer_name': 'd.customer_name',
+            'product_name': 'di.description',
+            'unit_price': 'di.unit_price',
+            'issue_date_str': 'COALESCE(d.issue_date, d.created_at, d.updated_at)',
+        };
+        const sortCol = allowedSort[sort_by] || 'COALESCE(d.issue_date, d.created_at, d.updated_at)';
+        const order = sort_order === 'asc' ? 'ASC' : 'DESC';
+        sql += ` ORDER BY ${sortCol} ${order} LIMIT ? OFFSET ?`;
+        params.push(limit, offset);
+
+        const [rows] = await database.query(sql, params);
+
+        return res.json({ message: 'success', data: rows, totalItems });
+    } catch (error) {
+        console.error('getPriceHistory Error:', error);
+        return res.status(500).json({ message: 'error', error: 'Internal server error' });
+    }
+}
+
+// --------------------------------------------------------------------------
+// 0d. CUSTOMER SUGGEST (Autocomplete)
 // --------------------------------------------------------------------------
 export async function suggestQuotationCustomers(req, res) {
     try {
@@ -68,7 +230,7 @@ export async function suggestQuotationCustomers(req, res) {
 // --------------------------------------------------------------------------
 export async function getAllQuotations(req, res) {
     try {
-        const { page = 1, itemsPerPage = 10, search, status, startDate, endDate, sort_by, sort_order } = req.query;
+        const { page = 1, itemsPerPage = 10, search, quotationId, deliveryNoteNo, receiptNo, customerName, status, startDate, endDate, sort_by, sort_order } = req.query;
         const offset = (page - 1) * itemsPerPage;
         const limit = Number(itemsPerPage) || 10;
 
@@ -84,6 +246,7 @@ export async function getAllQuotations(req, res) {
                 d.current_status, 
                 d.issue_date, 
                 d.issue_date_str,
+                d.created_at,
                 COALESCE((
                     SELECT SUM(di.quantity * di.unit_price)
                     FROM document_sections ds
@@ -97,6 +260,36 @@ export async function getAllQuotations(req, res) {
         let countSql = `SELECT COUNT(*) as total FROM documents d WHERE 1=1`;
         let params = [];
 
+        // ค้นหาแบบแยกแต่ละฟิลด์
+        if (quotationId) {
+            const cond = ` AND d.quotation_id LIKE ?`;
+            sql += cond;
+            countSql += cond;
+            params.push(`%${quotationId}%`);
+        }
+
+        if (deliveryNoteNo) {
+            const cond = ` AND d.delivery_note_no LIKE ?`;
+            sql += cond;
+            countSql += cond;
+            params.push(`%${deliveryNoteNo}%`);
+        }
+
+        if (receiptNo) {
+            const cond = ` AND d.receipt_no LIKE ?`;
+            sql += cond;
+            countSql += cond;
+            params.push(`%${receiptNo}%`);
+        }
+
+        if (customerName) {
+            const cond = ` AND d.customer_name LIKE ?`;
+            sql += cond;
+            countSql += cond;
+            params.push(`%${customerName}%`);
+        }
+
+        // Fallback: ค้นจาก search รวม (ถ้าไม่ได้ใช้ filter แยก)
         if (search) {
             const term = `%${search}%`;
             const searchCond = ` AND (d.id LIKE ? OR d.customer_name LIKE ? OR d.quotation_id LIKE ? OR d.delivery_note_no LIKE ? OR d.receipt_no LIKE ?)`;
@@ -171,30 +364,24 @@ export async function getQuotationById(req, res) {
     try {
         const { id } = req.params; // รับ System ID (QT-00x)
         
-        const [docs] = await database.query(`SELECT * FROM documents WHERE id = ?`, [id]);
-        
+        const pDocs = database.query(`SELECT * FROM documents WHERE id = ?`, [id]);
+        const pSections = database.query(`SELECT * FROM document_sections WHERE document_id = ? ORDER BY sort_order ASC`, [id]);
+        const pItems = database.query(`
+            SELECT di.* 
+            FROM document_items di 
+            JOIN document_sections ds ON di.section_id = ds.id 
+            WHERE ds.document_id = ? 
+            ORDER BY di.sort_order ASC`, 
+            [id]
+        );
+
+        const [[docs], [sections], [items]] = await Promise.all([pDocs, pSections, pItems]);
+
         if (docs.length === 0) {
             return res.status(404).json({ message: "Document not found" });
         }
         
         const document = Object.assign({}, docs[0]); 
-        
-        const [sections] = await database.query(
-            `SELECT * FROM document_sections WHERE document_id = ? ORDER BY sort_order ASC`, 
-            [id]
-        );
-
-        let items = [];
-        if (sections.length > 0) {
-            const sectionIds = sections.map(s => s.id);
-            if (sectionIds.length > 0) {
-                const [rows] = await database.query(
-                    `SELECT * FROM document_items WHERE section_id IN (?) ORDER BY sort_order ASC`, 
-                    [sectionIds]
-                );
-                items = rows;
-            }
-        }
 
         const productSections = sections.map(section => {
             return {
@@ -289,15 +476,17 @@ export async function createQuotation(req, res) {
                 
                 const sectionId = secResult.insertId;
 
-                if (section.items && Array.isArray(section.items)) {
+                if (section.items && Array.isArray(section.items) && section.items.length > 0) {
                     let itemOrder = 0;
-                    for (const item of section.items) {
+                    const itemsData = section.items.map(item => {
                         itemOrder++;
-                        await conn.query(
-                            `INSERT INTO document_items (section_id, description, quantity, unit, unit_price, sort_order) VALUES (?, ?, ?, ?, ?, ?)`,
-                            [sectionId, item.description, item.quantity, item.unit, item.unit_price, itemOrder]
-                        );
-                    }
+                        return [sectionId, item.description, item.quantity, item.unit, item.unit_price, itemOrder];
+                    });
+                    
+                    await conn.query(
+                        `INSERT INTO document_items (section_id, description, quantity, unit, unit_price, sort_order) VALUES ?`,
+                        [itemsData]
+                    );
                 }
             }
         }
@@ -381,15 +570,17 @@ export async function updateQuotation(req, res) {
                 
                 const sectionId = secResult.insertId;
 
-                if (section.items && Array.isArray(section.items)) {
+                if (section.items && Array.isArray(section.items) && section.items.length > 0) {
                     let itemOrder = 0;
-                    for (const item of section.items) {
+                    const itemsData = section.items.map(item => {
                         itemOrder++;
-                        await conn.query(
-                            `INSERT INTO document_items (section_id, description, quantity, unit, unit_price, sort_order) VALUES (?, ?, ?, ?, ?, ?)`,
-                            [sectionId, item.description, item.quantity, item.unit, item.unit_price, itemOrder]
-                        );
-                    }
+                        return [sectionId, item.description, item.quantity, item.unit, item.unit_price, itemOrder];
+                    });
+                    
+                    await conn.query(
+                        `INSERT INTO document_items (section_id, description, quantity, unit, unit_price, sort_order) VALUES ?`,
+                        [itemsData]
+                    );
                 }
             }
         }

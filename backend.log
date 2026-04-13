@@ -1,0 +1,10 @@
+
+> backend@1.0.0 start
+> node app.js
+
+LINE digest job scheduled at 08:30 Asia/Bangkok.
+Server listening on port 3333
+Health check available at http://localhost:3333/health-check
+Connected to MySQL successfully!
+[AUDIT-DEBUG] GET /tracking-status?phone=0999999999 → NO TOKEN found in headers
+[AUDIT-DEBUG] GET /tracking-status?phone=0999999999 → NO TOKEN found in headers

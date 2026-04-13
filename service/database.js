@@ -9,6 +9,7 @@ const pool = mysql.createPool({
     user: process.env.DBUSER,
     password: process.env.DBPWD,
     database: process.env.DB,
+    timezone: 'Z', // บังคับให้ Driver อ่านวันที่ที่มาจาก DB ว่าเป็น UTC (เพราะ Hostinger Server เป็น UTC)
     waitForConnections: true,
     // เพิ่ม connectionLimit เพื่อรองรับคำขอพร้อมกันมากขึ้น
     connectionLimit: 20,
