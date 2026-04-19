@@ -46,6 +46,7 @@ export async function getCaseInfo(req, res) {
             cusFirstName, 
             cusLastName, 
             cusPhone, 
+            caseInstitution,
             brokenSymptom, 
             caseType, 
             caseStatus, 
@@ -60,11 +61,11 @@ export async function getCaseInfo(req, res) {
         // Logic การค้นหา (Search)
         if (search) {
             // เพิ่มการค้นหาด้วย refSentRepairId ด้วยก็ได้ (เผื่ออยากค้นหาจากเลขใบส่งซ่อม)
-            const searchCondition = ` AND (caseId LIKE ? OR cusFirstName LIKE ? OR cusLastName LIKE ? OR cusPhone LIKE ? OR refSentRepairId LIKE ?)`;
+            const searchCondition = ` AND (caseId LIKE ? OR cusFirstName LIKE ? OR cusLastName LIKE ? OR cusPhone LIKE ? OR caseInstitution LIKE ? OR refSentRepairId LIKE ?)`;
             sql += searchCondition;
             countSql += searchCondition;
             const searchParam = `%${search}%`;
-            params.push(searchParam, searchParam, searchParam, searchParam, searchParam);
+            params.push(searchParam, searchParam, searchParam, searchParam, searchParam, searchParam);
         }
 
         // Logic การกรอง (Filter)
@@ -378,6 +379,28 @@ export async function getTrackingByPhone(req, res) {
 
     } catch (error) {
         console.error('Error tracking:', error);
+        res.status(500).json({ message: 'error', error: error.message });
+    }
+}
+
+// 5. ลบงานซ่อม (Delete)
+export async function deleteCase(req, res) {
+    try {
+        const { caseId } = req.body;
+
+        if (!caseId) {
+            return res.status(400).json({ message: 'error', error: 'caseId is required' });
+        }
+
+        const [result] = await database.query('DELETE FROM caseRepair WHERE caseId = ?', [caseId]);
+
+        if (result.affectedRows === 0) {
+            return res.status(404).json({ message: 'error', error: 'Case not found' });
+        }
+
+        res.json({ message: 'success' });
+    } catch (error) {
+        console.error('Error deleting case:', error);
         res.status(500).json({ message: 'error', error: error.message });
     }
 }

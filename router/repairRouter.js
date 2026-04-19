@@ -37,7 +37,14 @@ router.post('/update-case', auditEvent({
 	}),
 }), repairController.updateCase);
 
-// router.post('/delete-case', repairController.deleteCase); // อย่าลืมทำเพิ่มถ้าจะใช้ปุ่มลบ
+router.post('/delete-case', auditEvent({
+	module: 'repair',
+	entityType: 'caseRepair',
+	successAction: 'CASE_DELETED',
+	failAction: 'CASE_DELETED',
+	failSeverity: 'warning',
+	entityIdResolver: ({ req }) => req.body?.caseId || null,
+}), repairController.deleteCase);
 router.get('/tracking-status', repairController.getTrackingByPhone);
 
 export default router;

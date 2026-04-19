@@ -305,13 +305,13 @@ export async function getAllQuotations(req, res) {
         }
         
         if (startDate) {
-             sql += ` AND d.issue_date >= ?`;
-             countSql += ` AND d.issue_date >= ?`;
+             sql += ` AND COALESCE(d.issue_date, DATE(d.created_at)) >= ?`;
+             countSql += ` AND COALESCE(d.issue_date, DATE(d.created_at)) >= ?`;
              params.push(startDate);
         }
         if (endDate) {
-             sql += ` AND d.issue_date <= ?`;
-             countSql += ` AND d.issue_date <= ?`;
+             sql += ` AND COALESCE(d.issue_date, DATE(d.created_at)) <= ?`;
+             countSql += ` AND COALESCE(d.issue_date, DATE(d.created_at)) <= ?`;
              params.push(endDate);
         }
 
