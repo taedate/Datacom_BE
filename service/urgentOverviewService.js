@@ -357,7 +357,13 @@ export async function getUrgentDigestData(query = {}) {
     const digestDate = parseToYmd(query.date) || getBangkokTodayString();
 
     const allItems = await fetchUnifiedUrgentItems(digestDate, warnDays, criticalDays);
-    const sortedItems = sortUrgentItems(allItems);
+    
+    // ให้แจ้งเตือนเฉพาะงาน "รับซ่อม" และ "ส่งซ่อม" เท่านั้น 
+    const repairOnlyItems = allItems.filter(item => 
+        item.workType === 'caseRepair' || item.workType === 'caseSentRepair'
+    );
+
+    const sortedItems = sortUrgentItems(repairOnlyItems);
 
     const topAging = sortedItems.slice(0, 5).map((item) => ({
         refId: item.refId || '',
@@ -366,7 +372,7 @@ export async function getUrgentDigestData(query = {}) {
         ageDays: item.ageDays || 0
     }));
 
-    const summary = buildSummary(allItems, warnDays);
+    const summary = buildSummary(repairOnlyItems, warnDays);
 
     return {
         date: digestDate,
