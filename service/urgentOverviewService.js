@@ -130,7 +130,7 @@ function isClosedQuotation(row) {
 
 function normalizeRepair(row, todayYmd, warnDays, criticalDays) {
     const customerName = `${row.cusFirstName || ''} ${row.cusLastName || ''}`.trim();
-    const customer = customerName || row.caseInstitution || '';
+    const customer = row.caseInstitution || customerName || '';
     const baseDate = parseToYmd(row.datePickUp) || parseToYmd(row.created_at);
     const ageDays = diffDays(baseDate, todayYmd);
 
@@ -274,7 +274,7 @@ function buildLineText(date, summary, topAging) {
         lines.push('');
         lines.push('Top Aging');
         topAging.forEach((item, index) => {
-            lines.push(`${index + 1}. ${item.refId} | ${item.workTypeText} | ${item.status} | ${item.ageDays} วัน`);
+            lines.push(`${index + 1}. ${item.refId} | ${item.workTypeText} | ${item.status} | ${item.customer} | ${item.ageDays} วัน`);
         });
     }
 
@@ -369,6 +369,7 @@ export async function getUrgentDigestData(query = {}) {
         refId: item.refId || '',
         workTypeText: item.workTypeText || '',
         status: item.status || '',
+        customer: item.customer || '',
         ageDays: item.ageDays || 0
     }));
 
