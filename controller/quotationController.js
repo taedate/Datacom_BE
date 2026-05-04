@@ -230,7 +230,7 @@ export async function suggestQuotationCustomers(req, res) {
 // --------------------------------------------------------------------------
 export async function getAllQuotations(req, res) {
     try {
-        const { page = 1, itemsPerPage = 10, search, quotationId, deliveryNoteNo, receiptNo, customerName, status, startDate, endDate, sort_by, sort_order } = req.query;
+        const { page = 1, itemsPerPage = 10, search, quotationId, deliveryNoteNo, receiptNo, customerName, productName, status, startDate, endDate, sort_by, sort_order } = req.query;
         const offset = (page - 1) * itemsPerPage;
         const limit = Number(itemsPerPage) || 10;
 
@@ -287,6 +287,17 @@ export async function getAllQuotations(req, res) {
             sql += cond;
             countSql += cond;
             params.push(`%${customerName}%`);
+        }
+
+        if (productName) {
+            const cond = ` AND EXISTS (
+                SELECT 1 FROM document_sections ds
+                JOIN document_items di ON di.section_id = ds.id
+                WHERE ds.document_id = d.id AND di.description LIKE ?
+            )`;
+            sql += cond;
+            countSql += cond;
+            params.push(`%${productName}%`);
         }
 
         // Fallback: ค้นจาก search รวม (ถ้าไม่ได้ใช้ filter แยก)
@@ -480,11 +491,12 @@ export async function createQuotation(req, res) {
                     let itemOrder = 0;
                     const itemsData = section.items.map(item => {
                         itemOrder++;
-                        return [sectionId, item.description, item.quantity, item.unit, item.unit_price, itemOrder];
+                        const isSubItem = item.is_sub_item ? 1 : 0;
+                        return [sectionId, item.description, item.quantity, item.unit, item.unit_price, itemOrder, isSubItem];
                     });
                     
                     await conn.query(
-                        `INSERT INTO document_items (section_id, description, quantity, unit, unit_price, sort_order) VALUES ?`,
+                        `INSERT INTO document_items (section_id, description, quantity, unit, unit_price, sort_order, is_sub_item) VALUES ?`,
                         [itemsData]
                     );
                 }
@@ -574,11 +586,12 @@ export async function updateQuotation(req, res) {
                     let itemOrder = 0;
                     const itemsData = section.items.map(item => {
                         itemOrder++;
-                        return [sectionId, item.description, item.quantity, item.unit, item.unit_price, itemOrder];
+                        const isSubItem = item.is_sub_item ? 1 : 0;
+                        return [sectionId, item.description, item.quantity, item.unit, item.unit_price, itemOrder, isSubItem];
                     });
                     
                     await conn.query(
-                        `INSERT INTO document_items (section_id, description, quantity, unit, unit_price, sort_order) VALUES ?`,
+                        `INSERT INTO document_items (section_id, description, quantity, unit, unit_price, sort_order, is_sub_item) VALUES ?`,
                         [itemsData]
                     );
                 }

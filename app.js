@@ -17,6 +17,7 @@ import urgentOverviewRouter from './router/urgentOverviewRouter.js';
 import lineBotRouter from './router/lineBotRouter.js';
 import inviteRouter from './router/inviteRouter.js';
 import auditLogRouter from './router/auditLogRouter.js';
+import orderNoteRouter from './router/orderNoteRouter.js';
 import { startLineDigestJob } from './service/lineDigestJob.js';
 import { requestContext } from './middleware/requestContext.js';
 import { auditFallback } from './middleware/auditTrail.js';
@@ -79,6 +80,7 @@ app.use(urgentOverviewRouter);
 app.use(lineBotRouter);
 app.use(inviteRouter);
 app.use(auditLogRouter);
+app.use(orderNoteRouter);
 
 app.post('/__deploy-check', (req, res) => {
   res.status(200).json({ ok: true, ts: new Date().toISOString() });
