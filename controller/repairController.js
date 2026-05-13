@@ -49,6 +49,7 @@ export async function getCaseInfo(req, res) {
             caseInstitution,
             brokenSymptom, 
             caseType, 
+            caseStatus,
             datePickUp, 
             refSentRepairId,
             staffName,
