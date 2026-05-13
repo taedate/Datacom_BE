@@ -49,9 +49,9 @@ export async function getCaseInfo(req, res) {
             caseInstitution,
             brokenSymptom, 
             caseType, 
-            caseStatus, 
             datePickUp, 
             refSentRepairId,
+            staffName,
             created_at
         FROM caseRepair WHERE 1=1`;
 
@@ -185,7 +185,7 @@ export async function createCase(req, res) {
             cusFirstName, cusLastName, cusPhone, caseInstitution,
             brokenSymptom, caseType, caseStatus,
             caseBrand, caseModel, caseSN, caseDurableArticles, caseEquipment,
-            datePickUp, dateBeforePicUp, dateComplete, dateDelivered
+            datePickUp, dateBeforePicUp, dateComplete, dateDelivered, staffName
         } = req.body;
 
         // 1. กำหนด Prefix ตามประเภท
@@ -227,15 +227,15 @@ export async function createCase(req, res) {
         (caseId, cusFirstName, cusLastName, cusPhone, caseInstitution, 
          brokenSymptom, caseType, caseStatus, 
          caseBrand, caseModel, caseSN, caseDurableArticles, caseEquipment,
-         datePickUp, dateBeforePicUp, dateComplete, dateDelivered, 
+         datePickUp, dateBeforePicUp, dateComplete, dateDelivered, staffName,
          created_at${statusDateColumns.sqlColumn}) 
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW()${statusDateColumns.sqlValue})`;
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW()${statusDateColumns.sqlValue})`;
 
         await database.query(sql, [
             newId, cusFirstName, cusLastName, cusPhone, caseInstitution || '',
             brokenSymptom, caseType, initialStatus,
             caseBrand || '', caseModel || '', caseSN || '', caseDurableArticles || '', caseEquipment || '',
-            datePickUp || null, dateBeforePicUp || null, dateComplete || null, dateDelivered || null
+            datePickUp || null, dateBeforePicUp || null, dateComplete || null, dateDelivered || null, staffName || ''
         ]);
 
         res.json({ message: 'success', caseId: newId });
@@ -253,7 +253,7 @@ export async function updateCase(req, res) {
             brokenSymptom, caseType, caseStatus,
             caseBrand, caseModel, caseSN, caseDurableArticles, 
             caseEquipment,
-            datePickUp, dateBeforePicUp, dateComplete, dateDelivered
+            datePickUp, dateBeforePicUp, dateComplete, dateDelivered, staffName
         } = req.body;
 
         // ตรวจสอบว่าสถานะเปลี่ยนหรือไม่ เพื่อ auto-set statusDate
@@ -272,7 +272,7 @@ export async function updateCase(req, res) {
             cusFirstName=?, cusLastName=?, cusPhone=?, caseInstitution=?,
             brokenSymptom=?, caseType=?, caseStatus=?,
             caseBrand=?, caseModel=?, caseSN=?, caseDurableArticles=?, caseEquipment=?,
-            datePickUp=?, dateBeforePicUp=?, dateComplete=?, dateDelivered=?,
+            datePickUp=?, dateBeforePicUp=?, dateComplete=?, dateDelivered=?, staffName=?,
             updated_at=NOW()${statusDateSql}
             WHERE caseId=?`;
 
@@ -281,7 +281,7 @@ export async function updateCase(req, res) {
             brokenSymptom, caseType, caseStatus,
             caseBrand || '', caseModel || '', caseSN || '', caseDurableArticles || '', 
             caseEquipment || '',
-            datePickUp || null, dateBeforePicUp || null, dateComplete || null, dateDelivered || null,
+            datePickUp || null, dateBeforePicUp || null, dateComplete || null, dateDelivered || null, staffName || '',
             caseId
         ]);
 
