@@ -247,6 +247,9 @@ export async function getAllQuotations(req, res) {
                 d.issue_date, 
                 d.issue_date_str,
                 d.created_at,
+                (SELECT GROUP_CONCAT(ds.section_name SEPARATOR ', ') 
+                 FROM document_sections ds 
+                 WHERE ds.document_id = d.id) as section_names,
                 COALESCE((
                     SELECT SUM(di.quantity * di.unit_price)
                     FROM document_sections ds

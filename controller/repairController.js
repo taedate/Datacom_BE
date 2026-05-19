@@ -53,6 +53,8 @@ export async function getCaseInfo(req, res) {
             datePickUp, 
             refSentRepairId,
             staffName,
+            caseBrand,
+            caseModel,
             created_at
         FROM caseRepair WHERE 1=1`;
 
