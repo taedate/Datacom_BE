@@ -66,15 +66,17 @@ export async function getNextDeliveryDocId(req, res) {
         // prefix ที่ต้อง match เช่น "IV6904"
         const prefix = `IV${thaiYearStr}${monthStr}`;
 
-        // นับจำนวนเอกสารที่มี delivery_note_no ขึ้นต้นด้วย prefix นี้ (รวมทุกลูกค้า)
-        const sql = `SELECT COUNT(*) as count FROM documents
+        // ค้นหาเลขรันลำดับสูงสุดที่ขึ้นต้นด้วย prefix นี้
+        const sql = `SELECT MAX(CAST(SUBSTRING(delivery_note_no, LENGTH(?) + 1) AS UNSIGNED)) as max_seq 
+                     FROM documents
                      WHERE delivery_note_no IS NOT NULL
                      AND delivery_note_no LIKE CONCAT(?, '%')`;
 
-        const [rows] = await database.query(sql, [prefix]);
+        const [rows] = await database.query(sql, [prefix, prefix]);
 
-        const count = rows[0].count;
-        const seq = String(count + 1).padStart(3, '0');
+        const maxSeq = rows[0].max_seq || 0;
+        const nextSeq = maxSeq + 1;
+        const seq = String(nextSeq).padStart(3, '0');
 
         const docId = `${prefix}${seq}`;
 
@@ -495,11 +497,11 @@ export async function createQuotation(req, res) {
                     const itemsData = section.items.map(item => {
                         itemOrder++;
                         const isSubItem = item.is_sub_item ? 1 : 0;
-                        return [sectionId, item.description, item.quantity, item.unit, item.unit_price, itemOrder, isSubItem];
+                        return [sectionId, item.description, item.quantity, item.unit, item.unit_price, itemOrder, isSubItem, item.order_source || null];
                     });
                     
                     await conn.query(
-                        `INSERT INTO document_items (section_id, description, quantity, unit, unit_price, sort_order, is_sub_item) VALUES ?`,
+                        `INSERT INTO document_items (section_id, description, quantity, unit, unit_price, sort_order, is_sub_item, order_source) VALUES ?`,
                         [itemsData]
                     );
                 }
@@ -590,11 +592,11 @@ export async function updateQuotation(req, res) {
                     const itemsData = section.items.map(item => {
                         itemOrder++;
                         const isSubItem = item.is_sub_item ? 1 : 0;
-                        return [sectionId, item.description, item.quantity, item.unit, item.unit_price, itemOrder, isSubItem];
+                        return [sectionId, item.description, item.quantity, item.unit, item.unit_price, itemOrder, isSubItem, item.order_source || null];
                     });
                     
                     await conn.query(
-                        `INSERT INTO document_items (section_id, description, quantity, unit, unit_price, sort_order, is_sub_item) VALUES ?`,
+                        `INSERT INTO document_items (section_id, description, quantity, unit, unit_price, sort_order, is_sub_item, order_source) VALUES ?`,
                         [itemsData]
                     );
                 }

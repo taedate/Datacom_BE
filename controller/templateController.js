@@ -2,7 +2,13 @@ import database from '../service/database.js';
 
 export const getTemplates = async (req, res) => {
     try {
-        const [templates] = await database.query('SELECT * FROM quotation_templates ORDER BY name ASC');
+        const [templates] = await database.query(`
+            SELECT t.*, COUNT(ti.id) as item_count 
+            FROM quotation_templates t 
+            LEFT JOIN quotation_template_items ti ON t.id = ti.template_id 
+            GROUP BY t.id 
+            ORDER BY t.name ASC
+        `);
         res.json(templates);
     } catch (error) {
         console.error("Error fetching templates:", error);
