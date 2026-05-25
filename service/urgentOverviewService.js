@@ -358,9 +358,9 @@ export async function getUrgentDigestData(query = {}) {
 
     const allItems = await fetchUnifiedUrgentItems(digestDate, warnDays, criticalDays);
     
-    // ให้แจ้งเตือนเฉพาะงาน "รับซ่อม" และ "ส่งซ่อม" เท่านั้น 
+    // ให้แจ้งเตือนเฉพาะงาน "รับซ่อม" เท่านั้น และไม่รวมงานที่มีสถานะ "ส่งซ่อมอยู่"
     const repairOnlyItems = allItems.filter(item => 
-        item.workType === 'caseRepair' || item.workType === 'caseSentRepair'
+        item.workType === 'caseRepair' && item.status !== 'ส่งซ่อมอยู่'
     );
 
     const sortedItems = sortUrgentItems(repairOnlyItems);

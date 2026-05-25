@@ -497,7 +497,7 @@ export async function createQuotation(req, res) {
                     const itemsData = section.items.map(item => {
                         itemOrder++;
                         const isSubItem = item.is_sub_item ? 1 : 0;
-                        return [sectionId, item.description, item.quantity, item.unit, item.unit_price, itemOrder, isSubItem, item.order_source || null];
+                        return [sectionId, item.description, cleanVal(item.quantity), item.unit, cleanVal(item.unit_price), itemOrder, isSubItem, item.order_source || null];
                     });
                     
                     await conn.query(
@@ -592,7 +592,7 @@ export async function updateQuotation(req, res) {
                     const itemsData = section.items.map(item => {
                         itemOrder++;
                         const isSubItem = item.is_sub_item ? 1 : 0;
-                        return [sectionId, item.description, item.quantity, item.unit, item.unit_price, itemOrder, isSubItem, item.order_source || null];
+                        return [sectionId, item.description, cleanVal(item.quantity), item.unit, cleanVal(item.unit_price), itemOrder, isSubItem, item.order_source || null];
                     });
                     
                     await conn.query(
