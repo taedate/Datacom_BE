@@ -297,7 +297,7 @@ async function fetchUnifiedUrgentItems(referenceDate, warnDays, criticalDays) {
         ),
         database.query(
             `SELECT id, quotation_id, customer_name, current_status, issue_date, delivery_note_no, remark, created_at
-             FROM documents`
+             FROM documents WHERE is_borrow = 0`
         )
     ]);
 

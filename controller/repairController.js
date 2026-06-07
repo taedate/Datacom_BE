@@ -55,6 +55,8 @@ export async function getCaseInfo(req, res) {
             staffName,
             caseBrand,
             caseModel,
+            caseSN,
+            caseEquipment,
             created_at
         FROM caseRepair WHERE 1=1`;
 
@@ -287,6 +289,63 @@ export async function updateCase(req, res) {
             datePickUp || null, dateBeforePicUp || null, dateComplete || null, dateDelivered || null, staffName || '',
             caseId
         ]);
+
+        res.json({ message: 'success' });
+
+    } catch (error) {
+        console.error(error);
+        res.status(500).json({ message: 'error', error: error.message });
+    }
+}
+
+export async function updateCaseStatus(req, res) {
+    try {
+        const { caseId, caseStatus } = req.body;
+        if (!caseId || !caseStatus) {
+            return res.status(400).json({ message: 'error', error: 'caseId and caseStatus are required' });
+        }
+
+        const [currentRows] = await database.query('SELECT caseStatus, dateComplete, dateDelivered FROM caseRepair WHERE caseId = ?', [caseId]);
+        if (currentRows.length === 0) {
+            return res.status(404).json({ message: 'error', error: 'Case not found' });
+        }
+        const oldStatus = currentRows[0].caseStatus;
+        const statusChanged = oldStatus !== caseStatus;
+
+        if (statusChanged) {
+            const col = getStatusDateColumn(caseStatus);
+            let statusDateSql = col.sqlUpdate;
+
+            const now = new Date();
+            const bangkokTime = new Date(now.toLocaleString('en-US', { timeZone: 'Asia/Bangkok' }));
+            const yyyy = bangkokTime.getFullYear();
+            const mm = String(bangkokTime.getMonth() + 1).padStart(2, '0');
+            const dd = String(bangkokTime.getDate()).padStart(2, '0');
+            const todayFormatted = `${yyyy}-${mm}-${dd}`;
+
+            let extraFieldsSql = '';
+            let extraParams = [];
+
+            if (caseStatus === "ซ่อมเสร็จ" && !currentRows[0].dateComplete) {
+                extraFieldsSql += `, dateComplete = ?`;
+                extraParams.push(todayFormatted);
+            }
+            if (caseStatus === "ส่งมอบ" && !currentRows[0].dateDelivered) {
+                if (!currentRows[0].dateComplete) {
+                    extraFieldsSql += `, dateComplete = ?`;
+                    extraParams.push(todayFormatted);
+                }
+                extraFieldsSql += `, dateDelivered = ?`;
+                extraParams.push(todayFormatted);
+            }
+
+            const sql = `UPDATE caseRepair SET 
+                caseStatus = ?${statusDateSql}${extraFieldsSql},
+                updated_at = NOW()
+                WHERE caseId = ?`;
+
+            await database.query(sql, [caseStatus, ...extraParams, caseId]);
+        }
 
         res.json({ message: 'success' });
 

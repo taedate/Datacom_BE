@@ -36,6 +36,18 @@ router.post('/update-case', auditEvent({
 		newStatus: req.body?.caseStatus || null,
 	}),
 }), repairController.updateCase);
+router.post('/update-case-status', auditEvent({
+	module: 'repair',
+	entityType: 'caseRepair',
+	successAction: 'CASE_STATUS_UPDATED',
+	failAction: 'CASE_STATUS_UPDATED',
+	failSeverity: 'warning',
+	entityIdResolver: ({ req }) => req.body?.caseId || null,
+	detailBuilder: ({ req }) => ({
+		caseId: req.body?.caseId || null,
+		newStatus: req.body?.caseStatus || null,
+	}),
+}), repairController.updateCaseStatus);
 
 router.post('/delete-case', auditEvent({
 	module: 'repair',

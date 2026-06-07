@@ -24,21 +24,21 @@ export async function getNextQuotationDocId(req, res) {
         const thaiYearStr = String(thaiYear).padStart(2, '0');
         const monthStr = String(month).padStart(2, '0');
 
-        // นับจำนวนเอกสารของลูกค้ารายนี้ในเดือนนี้
-        const startOfMonth = `${ceYear}-${monthStr}-01 00:00:00`;
-        const nextMonthDate = new Date(ceYear, month, 1); // month is already 1-indexed, so this gives first day of next month
-        const nextMonthStr = `${nextMonthDate.getFullYear()}-${String(nextMonthDate.getMonth() + 1).padStart(2, '0')}-01 00:00:00`;
+        const prefix = `DATA${thaiYearStr}-${monthStr}`;
+        const suffix = `/${ceYear}`;
 
-        const sql = `SELECT COUNT(*) as count FROM documents 
+        const sql = `SELECT MAX(CAST(SUBSTRING(quotation_id, LENGTH(?) + 1) AS UNSIGNED)) as max_seq 
+                     FROM documents 
                      WHERE LOWER(TRIM(customer_name)) = LOWER(TRIM(?))
-                     AND created_at >= ? AND created_at < ?`;
+                     AND quotation_id LIKE CONCAT(?, '%', ?)
+                     AND is_borrow = 0`;
 
-        const [rows] = await database.query(sql, [customerName, startOfMonth, nextMonthStr]);
+        const [rows] = await database.query(sql, [prefix, customerName, prefix, suffix]);
+        const maxSeq = rows[0].max_seq || 0;
+        const nextSeq = maxSeq + 1;
+        const seq = String(nextSeq).padStart(2, '0');
 
-        const count = rows[0].count;
-        const seq = String(count + 1).padStart(2, '0');
-
-        const docId = `DATA${thaiYearStr}-${monthStr}${seq}/${ceYear}`;
+        const docId = `${prefix}${seq}${suffix}`;
 
         return res.json({ message: 'success', docId });
     } catch (error) {
@@ -114,7 +114,7 @@ export async function getPriceHistory(req, res) {
             FROM document_items di
             JOIN document_sections ds ON ds.id = di.section_id
             JOIN documents d ON d.id = ds.document_id
-            WHERE 1=1
+            WHERE d.is_borrow = 0
         `;
 
         let countSql = `
@@ -122,7 +122,7 @@ export async function getPriceHistory(req, res) {
             FROM document_items di
             JOIN document_sections ds ON ds.id = di.section_id
             JOIN documents d ON d.id = ds.document_id
-            WHERE 1=1
+            WHERE d.is_borrow = 0
         `;
 
         let params = [];
@@ -232,7 +232,7 @@ export async function suggestQuotationCustomers(req, res) {
 // --------------------------------------------------------------------------
 export async function getAllQuotations(req, res) {
     try {
-        const { page = 1, itemsPerPage = 10, search, quotationId, deliveryNoteNo, receiptNo, customerName, productName, status, startDate, endDate, sort_by, sort_order } = req.query;
+        const { page = 1, itemsPerPage = 10, search, quotationId, deliveryNoteNo, receiptNo, customerName, productName, status, startDate, endDate, sort_by, sort_order, isBorrow } = req.query;
         const offset = (page - 1) * itemsPerPage;
         const limit = Number(itemsPerPage) || 10;
 
@@ -249,6 +249,10 @@ export async function getAllQuotations(req, res) {
                 d.issue_date, 
                 d.issue_date_str,
                 d.created_at,
+                d.is_borrow,
+                d.borrow_status,
+                d.from_borrow_id,
+                d.from_borrow_no,
                 (SELECT GROUP_CONCAT(ds.section_name SEPARATOR ', ') 
                  FROM document_sections ds 
                  WHERE ds.document_id = d.id) as section_names,
@@ -264,6 +268,17 @@ export async function getAllQuotations(req, res) {
 
         let countSql = `SELECT COUNT(*) as total FROM documents d WHERE 1=1`;
         let params = [];
+
+        if (isBorrow !== undefined) {
+            const cond = ` AND d.is_borrow = ?`;
+            sql += cond;
+            countSql += cond;
+            params.push(Number(isBorrow) ? 1 : 0);
+        } else {
+            const cond = ` AND d.is_borrow = 0`;
+            sql += cond;
+            countSql += cond;
+        }
 
         // ค้นหาแบบแยกแต่ละฟิลด์
         if (quotationId) {
@@ -315,8 +330,9 @@ export async function getAllQuotations(req, res) {
         }
 
         if (status) {
-            sql += ` AND d.current_status = ?`;
-            countSql += ` AND d.current_status = ?`;
+            const statusCol = (isBorrow !== undefined && Number(isBorrow) === 1) ? 'd.borrow_status' : 'd.current_status';
+            sql += ` AND ${statusCol} = ?`;
+            countSql += ` AND ${statusCol} = ?`;
             params.push(status);
         }
         
@@ -458,8 +474,9 @@ export async function createQuotation(req, res) {
             receiver_name, received_date_str, received_date, sender_name, sent_date_str, sent_date, delivery_authorized_signer,
             receipt_no, receipt_issue_date_str, receipt_issue_date, payment_method, 
             cheque_bank, cheque_branch, cheque_no, cheque_amount, cheque_date_str, cheque_date,
-            goods_received_check_date_str, goods_received_check_date, money_receiver_name, money_receive_date_str, money_receive_date, receipt_authorized_signer
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`;
+            goods_received_check_date_str, goods_received_check_date, money_receiver_name, money_receive_date_str, money_receive_date, receipt_authorized_signer,
+            is_borrow, borrow_status
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`;
 
         const docParams = [
             systemId,   // id (Primary Key generated by Backend)
@@ -475,7 +492,9 @@ export async function createQuotation(req, res) {
             
             data.receipt_no, data.receipt_issue_date_str, cleanVal(data.receipt_issue_date), data.payment_method,
             data.cheque_bank, data.cheque_branch, data.cheque_no, data.cheque_amount, data.cheque_date_str, cleanVal(data.cheque_date),
-            data.goods_received_check_date_str, cleanVal(data.goods_received_check_date), data.money_receiver_name, data.money_receive_date_str, cleanVal(data.money_receive_date), data.receipt_authorized_signer
+            data.goods_received_check_date_str, cleanVal(data.goods_received_check_date), data.money_receiver_name, data.money_receive_date_str, cleanVal(data.money_receive_date), data.receipt_authorized_signer,
+            data.is_borrow !== undefined ? (Number(data.is_borrow) ? 1 : 0) : 0,
+            data.borrow_status || null
         ];
 
         await conn.query(docSql, docParams);
@@ -550,7 +569,8 @@ export async function updateQuotation(req, res) {
             receiver_name = ?, received_date_str = ?, received_date = ?, sender_name = ?, sent_date_str = ?, sent_date = ?, delivery_authorized_signer = ?,
             receipt_no = ?, receipt_issue_date_str = ?, receipt_issue_date = ?, payment_method = ?, 
             cheque_bank = ?, cheque_branch = ?, cheque_no = ?, cheque_amount = ?, cheque_date_str = ?, cheque_date = ?,
-            goods_received_check_date_str = ?, goods_received_check_date = ?, money_receiver_name = ?, money_receive_date_str = ?, money_receive_date = ?, receipt_authorized_signer = ?
+            goods_received_check_date_str = ?, goods_received_check_date = ?, money_receiver_name = ?, money_receive_date_str = ?, money_receive_date = ?, receipt_authorized_signer = ?,
+            is_borrow = ?, borrow_status = ?
             WHERE id = ?`; // Update record ที่มี System ID ตรงกัน
 
         const updateParams = [
@@ -567,6 +587,8 @@ export async function updateQuotation(req, res) {
             data.receipt_no, data.receipt_issue_date_str, cleanVal(data.receipt_issue_date), data.payment_method,
             data.cheque_bank, data.cheque_branch, data.cheque_no, data.cheque_amount, data.cheque_date_str, cleanVal(data.cheque_date),
             data.goods_received_check_date_str, cleanVal(data.goods_received_check_date), data.money_receiver_name, data.money_receive_date_str, cleanVal(data.money_receive_date), data.receipt_authorized_signer,
+            data.is_borrow !== undefined ? (Number(data.is_borrow) ? 1 : 0) : 0,
+            data.borrow_status || null,
             
             id // Parameter สุดท้าย: System ID (Primary Key)
         ];
@@ -631,5 +653,290 @@ export async function deleteQuotation(req, res) {
     } catch (error) {
         console.error("Error deleting quotation:", error);
         res.status(500).json({ message: "Internal server error" });
+    }
+}
+
+// --------------------------------------------------------------------------
+// 6. GENERATE NEXT BORROW DOC ID
+// --------------------------------------------------------------------------
+export async function getNextBorrowDocId(req, res) {
+    try {
+        const customerName = (req.query.customerName || '').trim();
+        if (!customerName) {
+            return res.status(400).json({ message: 'error', error: 'customerName is required' });
+        }
+
+        const now = new Date();
+        const bangkokTime = new Date(now.toLocaleString('en-US', { timeZone: 'Asia/Bangkok' }));
+
+        const ceYear = bangkokTime.getFullYear();           // ปี ค.ศ. เช่น 2026
+        const thaiYear = (ceYear + 543) % 100;              // ปี พ.ศ. 2 หลัก เช่น 69
+        const month = bangkokTime.getMonth() + 1;           // เดือน 1-12
+
+        const thaiYearStr = String(thaiYear).padStart(2, '0');
+        const monthStr = String(month).padStart(2, '0');
+
+        const prefix = `BR${thaiYearStr}-${monthStr}`;
+        const suffix = `/${ceYear}`;
+
+        const sql = `SELECT MAX(CAST(SUBSTRING(quotation_id, LENGTH(?) + 1) AS UNSIGNED)) as max_seq 
+                     FROM documents 
+                     WHERE LOWER(TRIM(customer_name)) = LOWER(TRIM(?))
+                     AND quotation_id LIKE CONCAT(?, '%', ?)
+                     AND is_borrow = 1`;
+
+        const [rows] = await database.query(sql, [prefix, customerName, prefix, suffix]);
+        const maxSeq = rows[0].max_seq || 0;
+        const nextSeq = maxSeq + 1;
+        const seq = String(nextSeq).padStart(2, '0');
+
+        const docId = `${prefix}${seq}${suffix}`;
+
+        return res.json({ message: 'success', docId });
+    } catch (error) {
+        console.error('getNextBorrowDocId Error:', error);
+        return res.status(500).json({ message: 'error', error: 'Internal server error' });
+    }
+}
+
+// --------------------------------------------------------------------------
+// 7. MOVE BORROW TO QUOTATION
+// --------------------------------------------------------------------------
+export async function moveBorrowToQuotation(req, res) {
+    const conn = await database.pool.getConnection();
+    try {
+        await conn.beginTransaction();
+        const { id } = req.params;
+
+        const [docs] = await conn.query(`SELECT * FROM documents WHERE id = ?`, [id]);
+        if (docs.length === 0) {
+            await conn.rollback();
+            return res.status(404).json({ message: "Document not found" });
+        }
+
+        const doc = docs[0];
+        if (!doc.is_borrow) {
+            await conn.rollback();
+            return res.status(400).json({ message: "This document is not a borrow slip" });
+        }
+
+        const customerName = (doc.customer_name || '').trim();
+        if (!customerName) {
+            await conn.rollback();
+            return res.status(400).json({ message: "Customer name is missing on the borrow slip" });
+        }
+
+        const now = new Date();
+        const bangkokTime = new Date(now.toLocaleString('en-US', { timeZone: 'Asia/Bangkok' }));
+        const ceYear = bangkokTime.getFullYear();
+        const thaiYear = (ceYear + 543) % 100;
+        const month = bangkokTime.getMonth() + 1;
+        const date = bangkokTime.getDate();
+
+        const thaiYearStr = String(thaiYear).padStart(2, '0');
+        const monthStr = String(month).padStart(2, '0');
+        const dateStr = String(date).padStart(2, '0');
+
+        // 1. Generate new Quotation ID (DATA...)
+        const prefix = `DATA${thaiYearStr}-${monthStr}`;
+        const suffix = `/${ceYear}`;
+
+        const sql = `SELECT MAX(CAST(SUBSTRING(quotation_id, LENGTH(?) + 1) AS UNSIGNED)) as max_seq 
+                     FROM documents 
+                     WHERE LOWER(TRIM(customer_name)) = LOWER(TRIM(?))
+                     AND quotation_id LIKE CONCAT(?, '%', ?)`;
+
+        const [rows] = await conn.query(sql, [prefix, customerName, prefix, suffix]);
+        const maxSeq = rows[0].max_seq || 0;
+        const nextSeq = maxSeq + 1;
+        const seq = String(nextSeq).padStart(2, '0');
+        const newQuotationId = `${prefix}${seq}${suffix}`;
+
+        // 2. Generate new Delivery Note ID (IV...) if not already present
+        let newDeliveryNoteNo = doc.delivery_note_no;
+        if (!newDeliveryNoteNo) {
+            const ivPrefix = `IV${thaiYearStr}${monthStr}`;
+            const ivSql = `SELECT MAX(CAST(SUBSTRING(delivery_note_no, LENGTH(?) + 1) AS UNSIGNED)) as max_seq 
+                           FROM documents
+                           WHERE delivery_note_no IS NOT NULL
+                           AND delivery_note_no LIKE CONCAT(?, '%')`;
+
+            const [ivRows] = await conn.query(ivSql, [ivPrefix, ivPrefix]);
+            const ivMaxSeq = ivRows[0].max_seq || 0;
+            const nextIvSeq = ivMaxSeq + 1;
+            const ivSeq = String(nextIvSeq).padStart(3, '0');
+            newDeliveryNoteNo = `${ivPrefix}${ivSeq}`;
+        }
+
+        // 3. Generate new System ID (QT-xxx)
+        const [lastRows] = await conn.query(
+            `SELECT id FROM documents WHERE id LIKE 'QT-%' AND id NOT LIKE 'QT-____-%' ORDER BY LENGTH(id) DESC, id DESC LIMIT 1`
+        );
+        
+        let nextId = "QT-001";
+        if (lastRows.length > 0) {
+            const lastId = lastRows[0].id;
+            const parts = lastId.split('-');
+            if (parts.length === 2 && !isNaN(parts[1])) {
+                const nextNum = parseInt(parts[1], 10) + 1; 
+                nextId = `QT-${String(nextNum).padStart(3, '0')}`;
+            }
+        }
+        const newSystemId = nextId;
+
+        // 4. Set today's date as delivery date
+        const todayThaiStr = `${dateStr}-${monthStr}-${thaiYear + 543}`;
+        const todaySql = `${ceYear}-${monthStr}-${dateStr}`;
+
+        // 5. Insert new Quotation Document (is_borrow = 0, current_status = 'DELIVERY_NOTE')
+        const insertDocSql = `INSERT INTO documents (
+            id, quotation_id, current_status, customer_name, customer_tax_id, customer_phone, customer_address,
+            salesman, remark, 
+            issue_date_str, issue_date, price_validity_days, valid_until_str, valid_until, offerer_name,
+            delivery_note_no, delivery_date_str, delivery_date, payment_term, due_date_str, due_date, delivery_address,
+            receiver_name, received_date_str, received_date, sender_name, sent_date_str, sent_date, delivery_authorized_signer,
+            receipt_no, receipt_issue_date_str, receipt_issue_date, payment_method, 
+            cheque_bank, cheque_branch, cheque_no, cheque_amount, cheque_date_str, cheque_date,
+            goods_received_check_date_str, goods_received_check_date, money_receiver_name, money_receive_date_str, money_receive_date, receipt_authorized_signer,
+            is_borrow, borrow_status, from_borrow_id, from_borrow_no
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`;
+
+        await conn.query(insertDocSql, [
+            newSystemId,
+            newQuotationId,
+            'DELIVERY_NOTE',
+            doc.customer_name, doc.customer_tax_id, doc.customer_phone, doc.customer_address,
+            doc.salesman, doc.remark,
+            doc.issue_date_str, doc.issue_date, doc.price_validity_days, doc.valid_until_str, doc.valid_until, doc.offerer_name,
+            newDeliveryNoteNo, todayThaiStr, todaySql, doc.payment_term, doc.due_date_str, doc.due_date, doc.delivery_address,
+            doc.receiver_name, doc.received_date_str, doc.received_date, doc.sender_name, doc.sent_date_str, doc.sent_date, doc.delivery_authorized_signer,
+            doc.receipt_no, doc.receipt_issue_date_str, doc.receipt_issue_date, doc.payment_method,
+            doc.cheque_bank, doc.cheque_branch, doc.cheque_no, doc.cheque_amount, doc.cheque_date_str, doc.cheque_date,
+            doc.goods_received_check_date_str, doc.goods_received_check_date, doc.money_receiver_name, doc.money_receive_date_str, doc.money_receive_date, doc.receipt_authorized_signer,
+            0,
+            null,
+            id,
+            doc.quotation_id
+        ]);
+
+        // 6. Copy sections & items
+        const [sections] = await conn.query(`SELECT * FROM document_sections WHERE document_id = ? ORDER BY sort_order`, [id]);
+        for (const sec of sections) {
+            const [secRes] = await conn.query(
+                `INSERT INTO document_sections (document_id, section_name, sort_order) VALUES (?, ?, ?)`,
+                [newSystemId, sec.section_name, sec.sort_order]
+            );
+            const newSecId = secRes.insertId;
+
+            const [items] = await conn.query(`SELECT * FROM document_items WHERE section_id = ? ORDER BY sort_order`, [sec.id]);
+            if (items.length > 0) {
+                const itemsValues = items.map(item => [
+                    newSecId,
+                    item.description,
+                    item.quantity,
+                    item.unit,
+                    item.unit_price,
+                    item.sort_order,
+                    item.is_sub_item,
+                    item.order_source
+                ]);
+                await conn.query(
+                    `INSERT INTO document_items (section_id, description, quantity, unit, unit_price, sort_order, is_sub_item, order_source) VALUES ?`,
+                    [itemsValues]
+                );
+            }
+        }
+
+        // 7. Update source borrow slip status to REQUISITIONED and ensure delivery note number is saved
+        await conn.query(
+            `UPDATE documents SET borrow_status = 'REQUISITIONED', delivery_note_no = ? WHERE id = ?`,
+            [newDeliveryNoteNo, id]
+        );
+
+        await conn.commit();
+        res.json({ 
+            message: "success", 
+            quotation_id: newQuotationId,
+            delivery_note_no: newDeliveryNoteNo,
+            new_id: newSystemId
+        });
+
+    } catch (error) {
+        await conn.rollback();
+        console.error("moveBorrowToQuotation Error:", error);
+        res.status(500).json({ message: "Internal server error" });
+    } finally {
+        conn.release();
+    }
+}
+
+export async function updateQuotationStatus(req, res) {
+    try {
+        const { id } = req.params;
+        const { current_status } = req.body;
+        
+        if (!current_status) {
+            return res.status(400).json({ message: "current_status is required" });
+        }
+        
+        // 1. Update status
+        await database.query(
+            "UPDATE documents SET current_status = ? WHERE id = ?",
+            [current_status, id]
+        );
+        
+        // 2. If changing to ORDERING, create or update the order note automatically!
+        if (current_status === "ORDERING") {
+            // Fetch quotation header and items to build note body
+            const [docs] = await database.query("SELECT customer_name FROM documents WHERE id = ?", [id]);
+            if (docs.length > 0) {
+                const customerName = docs[0].customer_name;
+                
+                // Fetch sections and items
+                const [items] = await database.query(
+                    `SELECT di.description, di.quantity, di.unit 
+                     FROM document_items di
+                     JOIN document_sections ds ON di.section_id = ds.id
+                     WHERE ds.document_id = ?
+                     ORDER BY ds.sort_order, di.sort_order`,
+                    [id]
+                );
+                
+                let noteBody = "";
+                items.forEach((item) => {
+                    const qty = item.quantity || 1;
+                    const unit = item.unit || "ชิ้น";
+                    noteBody += `[ ] ${item.description} - ${qty} ${unit}\n`;
+                });
+                
+                if (noteBody.trim()) {
+                    // Check if note already exists
+                    const [existing] = await database.query(
+                        "SELECT id FROM order_notes WHERE quotation_id = ?",
+                        [id]
+                    );
+                    
+                    const department = customerName || "ฝ่ายจัดซื้อ";
+                    const bodyText = noteBody.trim();
+                    
+                    if (existing.length > 0) {
+                        await database.query(
+                            "UPDATE order_notes SET department = ?, body = ? WHERE quotation_id = ?",
+                            [department, bodyText, id]
+                        );
+                    } else {
+                        await database.query(
+                            "INSERT INTO order_notes (department, body, quotation_id) VALUES (?, ?, ?)",
+                            [department, bodyText, id]
+                        );
+                    }
+                }
+            }
+        }
+        
+        res.json({ message: "Quotation status updated successfully" });
+    } catch (error) {
+        console.error("Error updating quotation status:", error);
+        res.status(500).json({ message: "Failed to update quotation status", error: error.message });
     }
 }

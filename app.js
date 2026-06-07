@@ -65,6 +65,10 @@ app.use(express.json({
 app.use(requestContext);
 app.use(optionalAuthenticate);
 app.use(auditFallback());
+app.use((req, res, next) => {
+    console.log(`[HTTP] ${req.method} ${req.originalUrl}`);
+    next();
+});
 
 // --- 3. เปิดให้เข้าถึงโฟลเดอร์รูปภาพ (Static Files) ---
 // สำคัญ: ต้องมีโฟลเดอร์ชื่อ 'uploads' อยู่ในระดับเดียวกับไฟล์นี้
