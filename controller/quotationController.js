@@ -435,7 +435,7 @@ export async function getQuotationById(req, res) {
 }
 
 // --------------------------------------------------------------------------
-// 3. CREATE NEW QUOTATION (Auto Generate System ID: QT-00x)
+// 3. CREATE NEW QUOTATION (Auto Generate System ID: QT-00x or BR-00x)
 // --------------------------------------------------------------------------
 export async function createQuotation(req, res) {
     const conn = await database.pool.getConnection();
@@ -444,19 +444,23 @@ export async function createQuotation(req, res) {
 
         const data = req.body;
         
-        // --- 1. GENERATE SYSTEM ID (QT-XXX) ---
-        // Logic: หา QT-XXX ตัวล่าสุด แล้วบวก 1
+        // --- 1. GENERATE SYSTEM ID (QT-XXX or BR-XXX) ---
+        // Logic: หา QT-XXX หรือ BR-XXX ตัวล่าสุด แล้วบวก 1
+        const isBorrow = data.is_borrow !== undefined ? (Number(data.is_borrow) ? 1 : 0) : 0;
+        const prefix = isBorrow ? "BR-" : "QT-";
+
         const [lastRows] = await conn.query(
-            `SELECT id FROM documents WHERE id LIKE 'QT-%' AND id NOT LIKE 'QT-____-%' ORDER BY LENGTH(id) DESC, id DESC LIMIT 1`
+            `SELECT id FROM documents WHERE id LIKE ? AND id NOT LIKE ? ORDER BY LENGTH(id) DESC, id DESC LIMIT 1`,
+            [`${prefix}%`, `${prefix}____-%`]
         );
         
-        let nextId = "QT-001";
+        let nextId = `${prefix}001`;
         if (lastRows.length > 0) {
-            const lastId = lastRows[0].id; // e.g., QT-005
-            const parts = lastId.split('-'); // ['QT', '005']
+            const lastId = lastRows[0].id; // e.g., QT-005 or BR-005
+            const parts = lastId.split('-'); // ['QT', '005'] or ['BR', '005']
             if (parts.length === 2 && !isNaN(parts[1])) {
                 const nextNum = parseInt(parts[1], 10) + 1; 
-                nextId = `QT-${String(nextNum).padStart(3, '0')}`;
+                nextId = `${prefix}${String(nextNum).padStart(3, '0')}`;
             }
         }
 
@@ -493,7 +497,7 @@ export async function createQuotation(req, res) {
             data.receipt_no, data.receipt_issue_date_str, cleanVal(data.receipt_issue_date), data.payment_method,
             data.cheque_bank, data.cheque_branch, data.cheque_no, data.cheque_amount, data.cheque_date_str, cleanVal(data.cheque_date),
             data.goods_received_check_date_str, cleanVal(data.goods_received_check_date), data.money_receiver_name, data.money_receive_date_str, cleanVal(data.money_receive_date), data.receipt_authorized_signer,
-            data.is_borrow !== undefined ? (Number(data.is_borrow) ? 1 : 0) : 0,
+            isBorrow,
             data.borrow_status || null
         ];
 
@@ -552,11 +556,16 @@ export async function updateQuotation(req, res) {
         const data = req.body;     // Data จาก Form
 
         // 1. Check if exists
-        const [existing] = await conn.query("SELECT id FROM documents WHERE id = ?", [id]);
+        const [existing] = await conn.query("SELECT id, is_borrow, borrow_status FROM documents WHERE id = ?", [id]);
         if (existing.length === 0) {
             await conn.rollback();
             return res.status(404).json({ message: "Document not found" });
         }
+        const existingDoc = existing[0];
+
+        // Safely determine is_borrow and borrow_status
+        const isBorrowValue = data.is_borrow !== undefined ? (Number(data.is_borrow) ? 1 : 0) : existingDoc.is_borrow;
+        const borrowStatusValue = data.borrow_status !== undefined ? data.borrow_status : existingDoc.borrow_status;
 
         // 2. Update Document Fields
         // * quotation_id = ? คืออัปเดตเลขที่ใบเสนอราคาตามที่ User แก้ไข
@@ -587,8 +596,8 @@ export async function updateQuotation(req, res) {
             data.receipt_no, data.receipt_issue_date_str, cleanVal(data.receipt_issue_date), data.payment_method,
             data.cheque_bank, data.cheque_branch, data.cheque_no, data.cheque_amount, data.cheque_date_str, cleanVal(data.cheque_date),
             data.goods_received_check_date_str, cleanVal(data.goods_received_check_date), data.money_receiver_name, data.money_receive_date_str, cleanVal(data.money_receive_date), data.receipt_authorized_signer,
-            data.is_borrow !== undefined ? (Number(data.is_borrow) ? 1 : 0) : 0,
-            data.borrow_status || null,
+            isBorrowValue,
+            borrowStatusValue,
             
             id // Parameter สุดท้าย: System ID (Primary Key)
         ];
