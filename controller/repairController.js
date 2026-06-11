@@ -65,12 +65,12 @@ export async function getCaseInfo(req, res) {
 
         // Logic การค้นหา (Search)
         if (search) {
-            // เพิ่มการค้นหาด้วย refSentRepairId ด้วยก็ได้ (เผื่ออยากค้นหาจากเลขใบส่งซ่อม)
-            const searchCondition = ` AND (caseId LIKE ? OR cusFirstName LIKE ? OR cusLastName LIKE ? OR cusPhone LIKE ? OR caseInstitution LIKE ? OR refSentRepairId LIKE ?)`;
+            // เพิ่มการค้นหาด้วย refSentRepairId, caseSN, caseBrand, caseModel (เผื่ออยากค้นหาจากเลขใบส่งซ่อม, S/N, ยี่ห้อ, รุ่น)
+            const searchCondition = ` AND (caseId LIKE ? OR cusFirstName LIKE ? OR cusLastName LIKE ? OR cusPhone LIKE ? OR caseInstitution LIKE ? OR refSentRepairId LIKE ? OR caseSN LIKE ? OR caseBrand LIKE ? OR caseModel LIKE ?)`;
             sql += searchCondition;
             countSql += searchCondition;
             const searchParam = `%${search}%`;
-            params.push(searchParam, searchParam, searchParam, searchParam, searchParam, searchParam);
+            params.push(searchParam, searchParam, searchParam, searchParam, searchParam, searchParam, searchParam, searchParam, searchParam);
         }
 
         // Logic การกรอง (Filter)
