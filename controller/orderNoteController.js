@@ -58,12 +58,21 @@ export async function deleteNote(req, res) {
         // Delete the note
         await database.query('DELETE FROM order_notes WHERE id = ?', [id]);
         
-        // If there was a linked quotation, set its status to 'ITEMS_READY'
+        // If there was a linked quotation, set its status to 'ITEMS_READY' if it hasn't progressed to DELIVERY_NOTE or RECEIPT
         if (linkedQuotationId) {
-            await database.query(
-                "UPDATE documents SET current_status = 'ITEMS_READY' WHERE id = ?",
+            const [docs] = await database.query(
+                'SELECT current_status FROM documents WHERE id = ?',
                 [linkedQuotationId]
             );
+            if (docs.length > 0) {
+                const currentStatus = docs[0].current_status;
+                if (currentStatus !== 'DELIVERY_NOTE' && currentStatus !== 'RECEIPT') {
+                    await database.query(
+                        "UPDATE documents SET current_status = 'ITEMS_READY' WHERE id = ?",
+                        [linkedQuotationId]
+                    );
+                }
+            }
         }
         
         res.json({ message: 'success' });
