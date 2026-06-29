@@ -7,7 +7,7 @@ CREATE TABLE IF NOT EXISTS documents (
     quotation_id VARCHAR(50),
     
     -- Status Tracking
-    current_status ENUM('QUOTATION', 'DELIVERY_NOTE', 'RECEIPT', 'CANCELLED') DEFAULT 'QUOTATION',
+    current_status ENUM('QUOTATION', 'ORDERING', 'ITEMS_READY', 'DELIVERY_NOTE', 'RECEIPT', 'BORROW', 'CANCELLED') DEFAULT 'QUOTATION',
     
     -- === ข้อมูลลูกค้า (Customer Info) ===
     customer_name VARCHAR(255),
