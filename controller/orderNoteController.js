@@ -106,3 +106,23 @@ export async function updateNote(req, res) {
         res.status(500).json({ error: 'Internal server error' });
     }
 }
+
+export async function deleteNoteByQuotation(req, res) {
+    try {
+        const { quotationId } = req.params;
+        
+        const [result] = await database.query(
+            'DELETE FROM order_notes WHERE quotation_id = ?',
+            [quotationId]
+        );
+        
+        if (result.affectedRows === 0) {
+            return res.status(404).json({ message: 'No order note found for this quotation' });
+        }
+        
+        res.json({ message: 'success', deletedCount: result.affectedRows });
+    } catch (error) {
+        console.error('Error deleting order note by quotation:', error);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+}
