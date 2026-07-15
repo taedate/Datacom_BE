@@ -534,6 +534,7 @@ export async function createQuotation(req, res) {
                 if (section.items && Array.isArray(section.items)) {
                     section.items.forEach((item, itemIndex) => {
                         const isSubItem = item.is_sub_item ? 1 : 0;
+                        const isDescOnly = item.is_desc_only ? 1 : 0;
                         itemsValues.push([
                             sectionId,
                             item.description,
@@ -542,7 +543,8 @@ export async function createQuotation(req, res) {
                             cleanVal(item.unit_price),
                             itemIndex + 1,
                             isSubItem,
-                            item.order_source || null
+                            item.order_source || null,
+                            isDescOnly
                         ]);
                     });
                 }
@@ -550,7 +552,7 @@ export async function createQuotation(req, res) {
 
             if (itemsValues.length > 0) {
                 await conn.query(
-                    `INSERT INTO document_items (section_id, description, quantity, unit, unit_price, sort_order, is_sub_item, order_source) VALUES ?`,
+                    `INSERT INTO document_items (section_id, description, quantity, unit, unit_price, sort_order, is_sub_item, order_source, is_desc_only) VALUES ?`,
                     [itemsValues]
                 );
             }
@@ -653,6 +655,7 @@ export async function updateQuotation(req, res) {
                 if (section.items && Array.isArray(section.items)) {
                     section.items.forEach((item, itemIndex) => {
                         const isSubItem = item.is_sub_item ? 1 : 0;
+                        const isDescOnly = item.is_desc_only ? 1 : 0;
                         itemsValues.push([
                             sectionId,
                             item.description,
@@ -661,7 +664,8 @@ export async function updateQuotation(req, res) {
                             cleanVal(item.unit_price),
                             itemIndex + 1,
                             isSubItem,
-                            item.order_source || null
+                            item.order_source || null,
+                            isDescOnly
                         ]);
                     });
                 }
@@ -669,7 +673,7 @@ export async function updateQuotation(req, res) {
 
             if (itemsValues.length > 0) {
                 await conn.query(
-                    `INSERT INTO document_items (section_id, description, quantity, unit, unit_price, sort_order, is_sub_item, order_source) VALUES ?`,
+                    `INSERT INTO document_items (section_id, description, quantity, unit, unit_price, sort_order, is_sub_item, order_source, is_desc_only) VALUES ?`,
                     [itemsValues]
                 );
             }
@@ -888,10 +892,11 @@ export async function moveBorrowToQuotation(req, res) {
                     item.unit_price,
                     item.sort_order,
                     item.is_sub_item,
-                    item.order_source
+                    item.order_source,
+                    item.is_desc_only
                 ]);
                 await conn.query(
-                    `INSERT INTO document_items (section_id, description, quantity, unit, unit_price, sort_order, is_sub_item, order_source) VALUES ?`,
+                    `INSERT INTO document_items (section_id, description, quantity, unit, unit_price, sort_order, is_sub_item, order_source, is_desc_only) VALUES ?`,
                     [itemsValues]
                 );
             }

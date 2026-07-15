@@ -36,7 +36,7 @@ function formatThaiDate(dateValue) {
 
 export async function getCaseInfo(req, res) {
     try {
-        const { page = 1, itemsPerPage = 10, search, caseStatus, caseType, dateRange, sort_by, sort_order, lastDate } = req.query;
+        const { page = 1, itemsPerPage = 10, search, caseStatus, caseType, dateRange, sort_by, sort_order, lastDate, customerName, caseInstitution, caseSN, caseBrand, caseModel } = req.query;
         const offset = (page - 1) * itemsPerPage;
         const limit = Number(itemsPerPage) || 10;
 
@@ -71,6 +71,39 @@ export async function getCaseInfo(req, res) {
             countSql += searchCondition;
             const searchParam = `%${search}%`;
             params.push(searchParam, searchParam, searchParam, searchParam, searchParam, searchParam, searchParam, searchParam, searchParam);
+        }
+
+        // Logic ค้นหาแยกฟิลด์ (Individual Field Search)
+        if (customerName) {
+            const cond = ` AND (cusFirstName LIKE ? OR cusLastName LIKE ?)`;
+            sql += cond;
+            countSql += cond;
+            const searchParam = `%${customerName}%`;
+            params.push(searchParam, searchParam);
+        }
+        if (caseInstitution) {
+            const cond = ` AND caseInstitution LIKE ?`;
+            sql += cond;
+            countSql += cond;
+            params.push(`%${caseInstitution}%`);
+        }
+        if (caseSN) {
+            const cond = ` AND caseSN LIKE ?`;
+            sql += cond;
+            countSql += cond;
+            params.push(`%${caseSN}%`);
+        }
+        if (caseBrand) {
+            const cond = ` AND caseBrand LIKE ?`;
+            sql += cond;
+            countSql += cond;
+            params.push(`%${caseBrand}%`);
+        }
+        if (caseModel) {
+            const cond = ` AND caseModel LIKE ?`;
+            sql += cond;
+            countSql += cond;
+            params.push(`%${caseModel}%`);
         }
 
         // Logic การกรอง (Filter)

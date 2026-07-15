@@ -32,7 +32,8 @@ export const getTemplateById = async (req, res) => {
             quantity: item.quantity,
             unit: item.unit,
             unitPrice: item.unit_price,
-            is_sub_item: item.is_sub_item === 1
+            is_sub_item: item.is_sub_item === 1,
+            is_desc_only: item.is_desc_only === 1
         }));
         res.json(template);
     } catch (error) {
@@ -51,8 +52,8 @@ export const createTemplate = async (req, res) => {
             for (let i = 0; i < items.length; i++) {
                 const item = items[i];
                 await database.query(
-                    'INSERT INTO quotation_template_items (template_id, description, quantity, unit, unit_price, is_sub_item, sort_order) VALUES (?, ?, ?, ?, ?, ?, ?)',
-                    [templateId, item.description || '', item.quantity || 1, item.unit || '', item.unitPrice === "" ? null : item.unitPrice, item.is_sub_item ? 1 : 0, i]
+                    'INSERT INTO quotation_template_items (template_id, description, quantity, unit, unit_price, is_sub_item, sort_order, is_desc_only) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+                    [templateId, item.description || '', item.quantity || 1, item.unit || '', item.unitPrice === "" ? null : item.unitPrice, item.is_sub_item ? 1 : 0, i, item.is_desc_only ? 1 : 0]
                 );
             }
         }
@@ -76,8 +77,8 @@ export const updateTemplate = async (req, res) => {
             for (let i = 0; i < items.length; i++) {
                 const item = items[i];
                 await database.query(
-                    'INSERT INTO quotation_template_items (template_id, description, quantity, unit, unit_price, is_sub_item, sort_order) VALUES (?, ?, ?, ?, ?, ?, ?)',
-                    [id, item.description || '', item.quantity || 1, item.unit || '', item.unitPrice === "" ? null : item.unitPrice, item.is_sub_item ? 1 : 0, i]
+                    'INSERT INTO quotation_template_items (template_id, description, quantity, unit, unit_price, is_sub_item, sort_order, is_desc_only) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+                    [id, item.description || '', item.quantity || 1, item.unit || '', item.unitPrice === "" ? null : item.unitPrice, item.is_sub_item ? 1 : 0, i, item.is_desc_only ? 1 : 0]
                 );
             }
         }
