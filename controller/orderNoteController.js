@@ -116,10 +116,6 @@ export async function deleteNoteByQuotation(req, res) {
             [quotationId]
         );
         
-        if (result.affectedRows === 0) {
-            return res.status(404).json({ message: 'No order note found for this quotation' });
-        }
-        
         res.json({ message: 'success', deletedCount: result.affectedRows });
     } catch (error) {
         console.error('Error deleting order note by quotation:', error);
