@@ -20,6 +20,7 @@ import auditLogRouter from './router/auditLogRouter.js';
 import orderNoteRouter from './router/orderNoteRouter.js';
 import templateRouter from './router/templateRouter.js';
 import inkPriceRouter from './router/inkPriceRouter.js';
+import stockRouter from './router/stockRouter.js';
 import { startLineDigestJob } from './service/lineDigestJob.js';
 import { requestContext } from './middleware/requestContext.js';
 import { auditFallback } from './middleware/auditTrail.js';
@@ -89,6 +90,7 @@ app.use(auditLogRouter);
 app.use(orderNoteRouter);
 app.use(templateRouter);
 app.use(inkPriceRouter);
+app.use(stockRouter);
 
 app.post('/__deploy-check', (req, res) => {
   res.status(200).json({ ok: true, ts: new Date().toISOString() });
