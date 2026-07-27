@@ -563,11 +563,15 @@ export async function createQuotation(req, res) {
         res.status(201).json({ message: "Quotation created successfully", id: systemId });
 
     } catch (error) {
-        await conn.rollback();
+        try {
+            await conn.rollback();
+        } catch (rbError) {
+            // Ignore rollback error if connection is already closed
+        }
         console.error("Error creating quotation:", error);
         res.status(500).json({ message: "Failed to create quotation", error: error.message });
     } finally {
-        conn.release();
+        if (conn) conn.release();
     }
 }
 
@@ -683,11 +687,15 @@ export async function updateQuotation(req, res) {
         res.json({ message: "Quotation updated successfully", id });
 
     } catch (error) {
-        await conn.rollback();
+        try {
+            await conn.rollback();
+        } catch (rbError) {
+            // Ignore rollback error if connection is already closed
+        }
         console.error("Error updating quotation:", error);
         res.status(500).json({ message: "Failed to update quotation", error: error.message });
     } finally {
-        conn.release();
+        if (conn) conn.release();
     }
 }
 
