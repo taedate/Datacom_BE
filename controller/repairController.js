@@ -40,25 +40,29 @@ export async function getCaseInfo(req, res) {
         const offset = (page - 1) * itemsPerPage;
         const limit = Number(itemsPerPage) || 10;
 
-        // Optimized: Select only columns needed for List View
+        // Optimized: Select columns needed for List View including joined sent repair info
         let sql = `SELECT 
-            caseId, 
-            cusFirstName, 
-            cusLastName, 
-            cusPhone, 
-            caseInstitution,
-            brokenSymptom, 
-            caseType, 
-            caseStatus,
-            datePickUp, 
-            refSentRepairId,
-            staffName,
-            caseBrand,
-            caseModel,
-            caseSN,
-            caseEquipment,
-            created_at
-        FROM caseRepair WHERE 1=1`;
+            c.caseId, 
+            c.cusFirstName, 
+            c.cusLastName, 
+            c.cusPhone, 
+            c.caseInstitution,
+            c.brokenSymptom, 
+            c.caseType, 
+            c.caseStatus,
+            c.datePickUp, 
+            c.refSentRepairId,
+            c.staffName,
+            c.caseBrand,
+            c.caseModel,
+            c.caseSN,
+            c.caseEquipment,
+            c.created_at,
+            s.caseSToMechanic AS refSentRepairMechanicName,
+            s.dateOfReceived AS sentRepairDateOfReceived
+        FROM caseRepair c
+        LEFT JOIN caseSentRepair s ON c.refSentRepairId COLLATE utf8mb4_unicode_ci = s.caseSId COLLATE utf8mb4_unicode_ci
+        WHERE 1=1`;
 
         let countSql = `SELECT COUNT(*) as total FROM caseRepair WHERE 1=1`;
         let params = [];
