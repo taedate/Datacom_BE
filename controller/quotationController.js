@@ -1009,3 +1009,217 @@ export async function updateQuotationStatus(req, res) {
         res.status(500).json({ message: "Failed to update quotation status", error: error.message });
     }
 }
+
+// --------------------------------------------------------------------------
+// 0e. GET QUOTATION EQUIPMENT SUMMARY & STOCK DEMAND
+// --------------------------------------------------------------------------
+export async function getQuotationEquipmentSummary(req, res) {
+    try {
+        const {
+            page = 1,
+            itemsPerPage = 15,
+            search,
+            customerName,
+            category = 'all',
+            excludeRepair = 'true',
+            status,
+            startDate,
+            endDate,
+            sort_by,
+            sort_order
+        } = req.query;
+
+        const offset = (Number(page) - 1) * Number(itemsPerPage);
+        const limit = Number(itemsPerPage) || 15;
+
+        let whereClauses = [`d.is_borrow = 0`, `COALESCE(di.is_desc_only, 0) = 0`, `di.quantity > 0`];
+        let params = [];
+
+        if (excludeRepair === 'true' || excludeRepair === true) {
+            whereClauses.push(`
+                di.description NOT LIKE '%ซ่อม%' 
+                AND ds.section_name NOT LIKE '%ซ่อม%' 
+                AND di.description NOT LIKE '%ค่าบริการ%' 
+                AND di.description NOT LIKE '%ค่าแรง%'
+                AND ds.section_name NOT LIKE '%ค่าบริการ%'
+            `);
+        }
+
+        if (category === 'computer') {
+            whereClauses.push(`(
+                di.description LIKE '%คอมพิวเตอร์%' OR di.description LIKE '%Computer%' OR di.description LIKE '%PC%' 
+                OR di.description LIKE '%Workstation%' OR di.description LIKE '%AIO%' OR di.description LIKE '%All-in-One%' 
+                OR di.description LIKE '%Notebook%' OR di.description LIKE '%Laptop%' OR ds.section_name LIKE '%คอมพิวเตอร์%'
+            )`);
+        } else if (category === 'printer') {
+            whereClauses.push(`(
+                di.description LIKE '%ปริ้นเตอร์%' OR di.description LIKE '%เครื่องพิมพ์%' OR di.description LIKE '%Printer%' 
+                OR di.description LIKE '%Plotter%' OR ds.section_name LIKE '%เครื่องพิมพ์%' OR ds.section_name LIKE '%ปริ้นเตอร์%'
+            )`);
+        } else if (category === 'ups') {
+            whereClauses.push(`(
+                di.description LIKE '%UPS%' OR di.description LIKE '%เครื่องสำรองไฟ%' OR di.description LIKE '%สำรองไฟ%'
+            )`);
+        } else if (category === 'other') {
+            whereClauses.push(`(
+                di.description NOT LIKE '%คอมพิวเตอร์%' AND di.description NOT LIKE '%Computer%' AND di.description NOT LIKE '%Workstation%'
+                AND di.description NOT LIKE '%Notebook%' AND di.description NOT LIKE '%Laptop%'
+                AND di.description NOT LIKE '%ปริ้นเตอร์%' AND di.description NOT LIKE '%เครื่องพิมพ์%' AND di.description NOT LIKE '%Printer%'
+                AND di.description NOT LIKE '%UPS%' AND di.description NOT LIKE '%เครื่องสำรองไฟ%' AND di.description NOT LIKE '%สำรองไฟ%'
+            )`);
+        }
+
+        if (search && search.trim()) {
+            whereClauses.push(`(di.description LIKE ? OR ds.section_name LIKE ?)`);
+            const s = `%${search.trim()}%`;
+            params.push(s, s);
+        }
+
+        if (customerName && customerName.trim()) {
+            whereClauses.push(`d.customer_name LIKE ?`);
+            params.push(`%${customerName.trim()}%`);
+        }
+
+        if (status && status.trim()) {
+            whereClauses.push(`d.current_status = ?`);
+            params.push(status.trim());
+        }
+
+        if (startDate) {
+            whereClauses.push(`d.issue_date >= ?`);
+            params.push(startDate);
+        }
+        if (endDate) {
+            whereClauses.push(`d.issue_date <= ?`);
+            params.push(endDate);
+        }
+
+        const whereSql = whereClauses.length > 0 ? 'WHERE ' + whereClauses.join(' AND ') : '';
+
+        let listSql = `
+            SELECT 
+                di.id as item_id,
+                d.id as document_id,
+                d.quotation_id,
+                d.delivery_note_no,
+                d.receipt_no,
+                d.customer_name,
+                d.issue_date,
+                d.issue_date_str,
+                d.created_at,
+                d.current_status,
+                ds.section_name,
+                di.description as product_name,
+                di.quantity,
+                di.unit,
+                di.unit_price,
+                (di.quantity * di.unit_price) as total_amount
+            FROM document_items di
+            JOIN document_sections ds ON ds.id = di.section_id
+            JOIN documents d ON d.id = ds.document_id
+            ${whereSql}
+        `;
+
+        let countSql = `
+            SELECT COUNT(*) as total
+            FROM document_items di
+            JOIN document_sections ds ON ds.id = di.section_id
+            JOIN documents d ON d.id = ds.document_id
+            ${whereSql}
+        `;
+
+        const allowedSort = {
+            'customer_name': 'd.customer_name',
+            'product_name': 'di.description',
+            'quantity': 'di.quantity',
+            'issue_date': 'COALESCE(d.issue_date, d.created_at)',
+            'quotation_id': 'd.quotation_id'
+        };
+        const sortCol = allowedSort[sort_by] || 'COALESCE(d.issue_date, d.created_at)';
+        const order = sort_order === 'asc' ? 'ASC' : 'DESC';
+
+        const listParams = [...params];
+        listSql += ` ORDER BY ${sortCol} ${order} LIMIT ? OFFSET ?`;
+        listParams.push(limit, offset);
+
+        const [items] = await database.query(listSql, listParams);
+        const [countRes] = await database.query(countSql, params);
+        const totalItems = countRes[0]?.total || 0;
+
+        let statsSql = `
+            SELECT 
+                SUM(CASE WHEN 
+                    di.description LIKE '%คอมพิวเตอร์%' OR di.description LIKE '%Computer%' OR di.description LIKE '%PC%' 
+                    OR di.description LIKE '%Workstation%' OR di.description LIKE '%AIO%' OR di.description LIKE '%All-in-One%' 
+                    OR di.description LIKE '%Notebook%' OR di.description LIKE '%Laptop%' OR ds.section_name LIKE '%คอมพิวเตอร์%'
+                THEN di.quantity ELSE 0 END) as total_computers,
+                
+                SUM(CASE WHEN 
+                    di.description LIKE '%ปริ้นเตอร์%' OR di.description LIKE '%เครื่องพิมพ์%' OR di.description LIKE '%Printer%' 
+                    OR di.description LIKE '%Plotter%' OR ds.section_name LIKE '%เครื่องพิมพ์%' OR ds.section_name LIKE '%ปริ้นเตอร์%'
+                THEN di.quantity ELSE 0 END) as total_printers,
+                
+                SUM(CASE WHEN 
+                    di.description LIKE '%UPS%' OR di.description LIKE '%เครื่องสำรองไฟ%' OR di.description LIKE '%สำรองไฟ%'
+                THEN di.quantity ELSE 0 END) as total_ups,
+
+                SUM(CASE WHEN 
+                    di.description NOT LIKE '%คอมพิวเตอร์%' AND di.description NOT LIKE '%Computer%' AND di.description NOT LIKE '%Workstation%'
+                    AND di.description NOT LIKE '%Notebook%' AND di.description NOT LIKE '%Laptop%'
+                    AND di.description NOT LIKE '%ปริ้นเตอร์%' AND di.description NOT LIKE '%เครื่องพิมพ์%' AND di.description NOT LIKE '%Printer%'
+                    AND di.description NOT LIKE '%UPS%' AND di.description NOT LIKE '%เครื่องสำรองไฟ%' AND di.description NOT LIKE '%สำรองไฟ%'
+                THEN di.quantity ELSE 0 END) as total_others,
+
+                COUNT(DISTINCT d.customer_name) as total_customers,
+                SUM(di.quantity) as total_quantity
+            FROM document_items di
+            JOIN document_sections ds ON ds.id = di.section_id
+            JOIN documents d ON d.id = ds.document_id
+            ${whereSql}
+        `;
+        const [statsRes] = await database.query(statsSql, params);
+        const summaryStats = {
+            totalComputers: Number(statsRes[0]?.total_computers || 0),
+            totalPrinters: Number(statsRes[0]?.total_printers || 0),
+            totalUps: Number(statsRes[0]?.total_ups || 0),
+            totalOthers: Number(statsRes[0]?.total_others || 0),
+            totalCustomers: Number(statsRes[0]?.total_customers || 0),
+            totalQuantity: Number(statsRes[0]?.total_quantity || 0)
+        };
+
+        let demandSql = `
+            SELECT 
+                TRIM(di.description) as product_name,
+                MAX(di.unit) as unit,
+                SUM(di.quantity) as total_demand_qty,
+                COUNT(DISTINCT d.customer_name) as customer_count,
+                GROUP_CONCAT(DISTINCT d.customer_name SEPARATOR '|||') as customer_list
+            FROM document_items di
+            JOIN document_sections ds ON ds.id = di.section_id
+            JOIN documents d ON d.id = ds.document_id
+            ${whereSql}
+            GROUP BY TRIM(di.description)
+            ORDER BY total_demand_qty DESC
+            LIMIT 50
+        `;
+        const [demandRows] = await database.query(demandSql, params);
+        const stockDemand = demandRows.map(row => ({
+            product_name: row.product_name,
+            unit: row.unit || 'เครื่อง',
+            total_demand_qty: Number(row.total_demand_qty || 0),
+            customer_count: Number(row.customer_count || 0),
+            customers: row.customer_list ? row.customer_list.split('|||') : []
+        }));
+
+        return res.json({
+            message: 'success',
+            data: items,
+            totalItems,
+            summaryStats,
+            stockDemand
+        });
+    } catch (error) {
+        console.error('getQuotationEquipmentSummary Error:', error);
+        return res.status(500).json({ message: 'error', error: 'Internal server error' });
+    }
+}

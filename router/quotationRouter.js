@@ -7,6 +7,7 @@ import {
     getNextQuotationDocId,
     getNextDeliveryDocId,
     getPriceHistory,
+    getQuotationEquipmentSummary,
     createQuotation, 
     updateQuotation, 
     deleteQuotation,
@@ -28,6 +29,7 @@ router.get('/quotation/next-doc-id', getNextQuotationDocId);
 router.get('/quotation/next-delivery-id', getNextDeliveryDocId);
 router.get('/quotation/next-borrow-id', getNextBorrowDocId);
 router.get('/quotation/price-history', getPriceHistory);
+router.get('/quotation/equipment-summary', getQuotationEquipmentSummary);
 router.post('/quotation/move-borrow-to-quotation/:id', auditEvent({
     module: 'quotation',
     entityType: 'quotation',
