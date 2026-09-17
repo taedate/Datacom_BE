@@ -1,0 +1,4 @@
+ALTER TABLE caseRepair 
+ADD COLUMN repairDetails TEXT DEFAULT NULL AFTER caseEquipment,
+ADD COLUMN repairCost DECIMAL(10,2) DEFAULT NULL AFTER repairDetails,
+ADD COLUMN repairPrice DECIMAL(10,2) DEFAULT NULL AFTER repairCost;

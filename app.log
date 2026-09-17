@@ -1,0 +1,76 @@
+Checking/creating stocks table...
+LINE digest job scheduled at 08:30 Asia/Bangkok.
+Server listening on port 3333
+Health check available at http://localhost:3333/health-check
+Connected to MySQL successfully!
+Stocks table check/creation completed successfully.
+[AUDIT-DEBUG] GET /get-case-info?page=1&itemsPerPage=1 → NO TOKEN found in headers
+[HTTP] GET /get-case-info?page=1&itemsPerPage=1
+[AUDIT-DEBUG] GET /get-case-info?page=1&itemsPerPage=1 → NO TOKEN found in headers
+[AUDIT-DEBUG] GET /get-case-detail/PC-146 → userId=3 (tae)
+[HTTP] GET /get-case-detail/PC-146
+[AUDIT-DEBUG] GET /get-case-detail/PC-146 → userId=3 (tae)
+[AUDIT-DEBUG] GET /get-case-info?page=1&itemsPerPage=50 → userId=3 (tae)
+[HTTP] GET /get-case-info?page=1&itemsPerPage=50
+[AUDIT-DEBUG] GET /get-case-info?page=1&itemsPerPage=50 → userId=3 (tae)
+[AUDIT-DEBUG] GET /get-filter-options → userId=3 (tae)
+[HTTP] GET /get-filter-options
+[AUDIT-DEBUG] GET /get-filter-options → userId=3 (tae)
+[AUDIT-DEBUG] GET /get-filter-options → userId=3 (tae)
+[HTTP] GET /get-filter-options
+[AUDIT-DEBUG] GET /get-filter-options → userId=3 (tae)
+[AUDIT-DEBUG] GET /get-case-info?page=1&itemsPerPage=50 → userId=3 (tae)
+[HTTP] GET /get-case-info?page=1&itemsPerPage=50
+[AUDIT-DEBUG] GET /get-case-info?page=1&itemsPerPage=50 → userId=3 (tae)
+[AUDIT-DEBUG] GET /get-case-info?page=1&itemsPerPage=10000 → userId=3 (tae)
+[HTTP] GET /get-case-info?page=1&itemsPerPage=10000
+[AUDIT-DEBUG] GET /get-case-info?page=1&itemsPerPage=10000 → userId=3 (tae)
+[AUDIT-DEBUG] GET /get-case-detail/PC-146 → userId=3 (tae)
+[HTTP] GET /get-case-detail/PC-146
+[AUDIT-DEBUG] GET /get-case-detail/PC-146 → userId=3 (tae)
+[AUDIT-DEBUG] POST /update-case → userId=3 (tae)
+[HTTP] POST /update-case
+[AUDIT-DEBUG] POST /update-case → userId=3 (tae)
+[AUDIT-DEBUG] GET /get-case-info?page=1&itemsPerPage=50 → userId=3 (tae)
+[HTTP] GET /get-case-info?page=1&itemsPerPage=50
+[AUDIT-DEBUG] GET /get-case-info?page=1&itemsPerPage=50 → userId=3 (tae)
+[AUDIT-DEBUG] GET /get-filter-options → userId=3 (tae)
+[HTTP] GET /get-filter-options
+[AUDIT-DEBUG] GET /get-filter-options → userId=3 (tae)
+[AUDIT-DEBUG] GET /get-case-info?page=1&itemsPerPage=10000 → userId=3 (tae)
+[HTTP] GET /get-case-info?page=1&itemsPerPage=10000
+[AUDIT-DEBUG] GET /get-case-info?page=1&itemsPerPage=10000 → userId=3 (tae)
+[AUDIT-DEBUG] GET /get-case-info?page=1&itemsPerPage=50 → userId=3 (tae)
+[HTTP] GET /get-case-info?page=1&itemsPerPage=50
+[AUDIT-DEBUG] GET /get-case-info?page=1&itemsPerPage=50 → userId=3 (tae)
+[AUDIT-DEBUG] GET /get-filter-options → userId=3 (tae)
+[HTTP] GET /get-filter-options
+[AUDIT-DEBUG] GET /get-filter-options → userId=3 (tae)
+[AUDIT-DEBUG] GET /get-case-info?page=1&itemsPerPage=50 → userId=3 (tae)
+[HTTP] GET /get-case-info?page=1&itemsPerPage=50
+[AUDIT-DEBUG] GET /get-case-info?page=1&itemsPerPage=50 → userId=3 (tae)
+[AUDIT-DEBUG] GET /get-filter-options → userId=3 (tae)
+[HTTP] GET /get-filter-options
+[AUDIT-DEBUG] GET /get-filter-options → userId=3 (tae)
+[AUDIT-DEBUG] GET /get-case-info?page=1&itemsPerPage=50 → userId=3 (tae)
+[HTTP] GET /get-case-info?page=1&itemsPerPage=50
+[AUDIT-DEBUG] GET /get-case-info?page=1&itemsPerPage=50 → userId=3 (tae)
+[AUDIT-DEBUG] GET /get-filter-options → userId=3 (tae)
+[HTTP] GET /get-filter-options
+[AUDIT-DEBUG] GET /get-filter-options → userId=3 (tae)
+[AUDIT-DEBUG] GET /api/get-case-info?itemsPerPage=5 → NO TOKEN found in headers
+[HTTP] GET /api/get-case-info?itemsPerPage=5
+[AUDIT-DEBUG] GET /api/get-case-info?itemsPerPage=5 → NO TOKEN found in headers
+[AUDIT-DEBUG] GET /api/get-case-info?itemsPerPage=5 → NO TOKEN found in headers
+[AUDIT-DEBUG] GET /api/get-case-info?itemsPerPage=5 → NO TOKEN found in headers
+[AUDIT-DEBUG] GET /api/get-case-info?itemsPerPage=5 → NO TOKEN found in headers
+[AUDIT-DEBUG] GET /api/get-case-info?itemsPerPage=5 → NO TOKEN found in headers
+[AUDIT-DEBUG] GET /api/get-case-info?itemsPerPage=5 → NO TOKEN found in headers
+[AUDIT-DEBUG] GET /api/get-case-info?itemsPerPage=5 → NO TOKEN found in headers
+[AUDIT-DEBUG] GET /get-case-info?itemsPerPage=2 → NO TOKEN found in headers
+[HTTP] GET /get-case-info?itemsPerPage=2
+[AUDIT-DEBUG] GET /get-case-info?itemsPerPage=2 → NO TOKEN found in headers
+Database query failed with ECONNRESET, retrying (1/2)
+[AUDIT-DEBUG] GET /get-case-info?itemsPerPage=100000 → NO TOKEN found in headers
+[HTTP] GET /get-case-info?itemsPerPage=100000
+[AUDIT-DEBUG] GET /get-case-info?itemsPerPage=100000 → NO TOKEN found in headers

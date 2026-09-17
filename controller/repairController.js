@@ -37,8 +37,9 @@ function formatThaiDate(dateValue) {
 export async function getCaseInfo(req, res) {
     try {
         const { page = 1, itemsPerPage = 10, search, caseStatus, caseType, dateRange, sort_by, sort_order, lastDate, customerName, caseInstitution, caseSN, caseBrand, caseModel } = req.query;
-        const offset = (page - 1) * itemsPerPage;
-        const limit = Number(itemsPerPage) || 10;
+        const parsedItemsPerPage = Number(itemsPerPage);
+        const limit = parsedItemsPerPage === -1 || parsedItemsPerPage >= 10000 ? 1000000 : (parsedItemsPerPage || 10);
+        const offset = (Number(page) - 1) * (parsedItemsPerPage === -1 || parsedItemsPerPage >= 10000 ? 0 : (parsedItemsPerPage || 10));
 
         // Optimized: Select columns needed for List View including joined sent repair info
         let sql = `SELECT 
@@ -56,7 +57,13 @@ export async function getCaseInfo(req, res) {
             c.caseBrand,
             c.caseModel,
             c.caseSN,
+            c.caseDurableArticles,
             c.caseEquipment,
+            c.repairDetails,
+            c.repairCost,
+            c.repairPrice,
+            c.dateComplete,
+            c.dateDelivered,
             c.created_at,
             s.caseSToMechanic AS refSentRepairMechanicName,
             s.dateOfReceived AS sentRepairDateOfReceived
@@ -123,13 +130,15 @@ export async function getCaseInfo(req, res) {
             params.push(caseType);
         }
 
-        // Logic กรองวันที่ (String Match)
+        // Logic กรองวันที่ (รองรับทั้งช่วงข้ามเดือน/ข้ามปี)
         if (dateRange) {
              const [start, end] = dateRange.split(',');
              if(start && end) {
-                 sql += ` AND datePickUp BETWEEN ? AND ?`;
-                 countSql += ` AND datePickUp BETWEEN ? AND ?`;
-                 params.push(start, end);
+                 const cleanStart = start.trim().replace(/\//g, '-');
+                 const cleanEnd = end.trim().replace(/\//g, '-');
+                 sql += ` AND STR_TO_DATE(REPLACE(datePickUp, '/', '-'), '%d-%m-%Y') BETWEEN STR_TO_DATE(?, '%d-%m-%Y') AND STR_TO_DATE(?, '%d-%m-%Y')`;
+                 countSql += ` AND STR_TO_DATE(REPLACE(datePickUp, '/', '-'), '%d-%m-%Y') BETWEEN STR_TO_DATE(?, '%d-%m-%Y') AND STR_TO_DATE(?, '%d-%m-%Y')`;
+                 params.push(cleanStart, cleanEnd);
              }
         }
 
@@ -214,7 +223,24 @@ export async function getCaseDetail(req, res) {
         if (rows.length === 0) {
             return res.status(404).json({ message: 'error', error: 'Case not found' });
         }
-        res.json({ message: 'success', data: rows[0] });
+        const caseData = rows[0];
+        let repairItems = [];
+        if (caseData.repairDetails) {
+            try {
+                const parsed = JSON.parse(caseData.repairDetails);
+                if (Array.isArray(parsed)) {
+                    repairItems = parsed;
+                }
+            } catch (e) {
+                repairItems = [{
+                    description: caseData.repairDetails,
+                    cost: caseData.repairCost,
+                    price: caseData.repairPrice
+                }];
+            }
+        }
+        caseData.repairItems = repairItems;
+        res.json({ message: 'success', data: caseData });
     } catch (error) {
         res.status(500).json({ message: 'error', error: error.message });
     }
@@ -227,6 +253,7 @@ export async function createCase(req, res) {
             cusFirstName, cusLastName, cusPhone, caseInstitution,
             brokenSymptom, caseType, caseStatus,
             caseBrand, caseModel, caseSN, caseDurableArticles, caseEquipment,
+            repairDetails, repairCost, repairPrice,
             datePickUp, dateBeforePicUp, dateComplete, dateDelivered, staffName
         } = req.body;
 
@@ -264,19 +291,30 @@ export async function createCase(req, res) {
         const initialStatus = caseStatus || 'รับเครื่องแล้ว';
         const statusDateColumns = getStatusDateColumn(initialStatus);
 
+        const cleanPrice = (val) => (val !== undefined && val !== null && val !== '' && !isNaN(val)) ? parseFloat(val) : null;
+
+        let finalRepairDetails = repairDetails;
+        if (Array.isArray(req.body.repairItems)) {
+            finalRepairDetails = JSON.stringify(req.body.repairItems);
+        } else if (typeof repairDetails === 'object' && repairDetails !== null) {
+            finalRepairDetails = JSON.stringify(repairDetails);
+        }
+
         // 5. บันทึก (ใส่ NOW() ใน created_at + statusDate)
         const sql = `INSERT INTO caseRepair 
         (caseId, cusFirstName, cusLastName, cusPhone, caseInstitution, 
          brokenSymptom, caseType, caseStatus, 
          caseBrand, caseModel, caseSN, caseDurableArticles, caseEquipment,
+         repairDetails, repairCost, repairPrice,
          datePickUp, dateBeforePicUp, dateComplete, dateDelivered, staffName,
          created_at${statusDateColumns.sqlColumn}) 
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW()${statusDateColumns.sqlValue})`;
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW()${statusDateColumns.sqlValue})`;
 
         await database.query(sql, [
             newId, cusFirstName, cusLastName, cusPhone, caseInstitution || '',
             brokenSymptom, caseType, initialStatus,
             caseBrand || '', caseModel || '', caseSN || '', caseDurableArticles || '', caseEquipment || '',
+            finalRepairDetails || '', cleanPrice(repairCost), cleanPrice(repairPrice),
             datePickUp || null, dateBeforePicUp || null, dateComplete || null, dateDelivered || null, staffName || ''
         ]);
 
@@ -295,6 +333,7 @@ export async function updateCase(req, res) {
             brokenSymptom, caseType, caseStatus,
             caseBrand, caseModel, caseSN, caseDurableArticles, 
             caseEquipment,
+            repairDetails, repairCost, repairPrice,
             datePickUp, dateBeforePicUp, dateComplete, dateDelivered, staffName
         } = req.body;
 
@@ -310,10 +349,20 @@ export async function updateCase(req, res) {
             statusDateSql = col.sqlUpdate;
         }
 
+        const cleanPrice = (val) => (val !== undefined && val !== null && val !== '' && !isNaN(val)) ? parseFloat(val) : null;
+
+        let finalRepairDetails = repairDetails;
+        if (Array.isArray(req.body.repairItems)) {
+            finalRepairDetails = JSON.stringify(req.body.repairItems);
+        } else if (typeof repairDetails === 'object' && repairDetails !== null) {
+            finalRepairDetails = JSON.stringify(repairDetails);
+        }
+
         const sql = `UPDATE caseRepair SET 
             cusFirstName=?, cusLastName=?, cusPhone=?, caseInstitution=?,
             brokenSymptom=?, caseType=?, caseStatus=?,
             caseBrand=?, caseModel=?, caseSN=?, caseDurableArticles=?, caseEquipment=?,
+            repairDetails=?, repairCost=?, repairPrice=?,
             datePickUp=?, dateBeforePicUp=?, dateComplete=?, dateDelivered=?, staffName=?,
             updated_at=NOW()${statusDateSql}
             WHERE caseId=?`;
@@ -323,6 +372,7 @@ export async function updateCase(req, res) {
             brokenSymptom, caseType, caseStatus,
             caseBrand || '', caseModel || '', caseSN || '', caseDurableArticles || '', 
             caseEquipment || '',
+            finalRepairDetails || '', cleanPrice(repairCost), cleanPrice(repairPrice),
             datePickUp || null, dateBeforePicUp || null, dateComplete || null, dateDelivered || null, staffName || '',
             caseId
         ]);
