@@ -6,6 +6,7 @@ import {
     suggestQuotationCustomers,
     getNextQuotationDocId,
     getNextDeliveryDocId,
+    suggestDeliveryNotes,
     getPriceHistory,
     getQuotationEquipmentSummary,
     createQuotation, 
@@ -25,6 +26,7 @@ router.use(optionalAuthenticate);
 // Define routes
 router.get("/get-quotation-info", getAllQuotations);
 router.get('/quotation/customers/suggest', suggestQuotationCustomers);
+router.get('/quotation/delivery-notes/suggest', suggestDeliveryNotes);
 router.get('/quotation/next-doc-id', getNextQuotationDocId);
 router.get('/quotation/next-delivery-id', getNextDeliveryDocId);
 router.get('/quotation/next-borrow-id', getNextBorrowDocId);

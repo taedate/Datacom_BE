@@ -88,6 +88,65 @@ export async function getNextDeliveryDocId(req, res) {
 }
 
 // --------------------------------------------------------------------------
+// 0b2. SUGGEST DELIVERY NOTES (Autocomplete/List for Requisitions & Tracking)
+// --------------------------------------------------------------------------
+export async function suggestDeliveryNotes(req, res) {
+    try {
+        const rawQ = req.query.q;
+        const requestedLimit = Number(req.query.limit);
+        const limit = Number.isFinite(requestedLimit)
+            ? Math.max(1, Math.min(100, Math.floor(requestedLimit)))
+            : 30;
+
+        let whereClause = "";
+        const params = [];
+
+        if (typeof rawQ === 'string' && rawQ.trim() !== '') {
+            const q = rawQ.trim();
+            whereClause = " AND (LOWER(d.delivery_note_no) LIKE CONCAT('%', LOWER(?), '%') OR LOWER(d.customer_name) LIKE CONCAT('%', LOWER(?), '%'))";
+            params.push(q, q);
+        }
+
+        const sql = `
+            SELECT
+                x.delivery_note_no,
+                x.customer_name,
+                x.delivery_date_str,
+                x.issue_date_str,
+                x.document_id,
+                x.lastUsedAt
+            FROM (
+                SELECT
+                    TRIM(d.delivery_note_no) AS delivery_note_no,
+                    TRIM(d.customer_name) AS customer_name,
+                    d.delivery_date_str,
+                    d.issue_date_str,
+                    d.id AS document_id,
+                    COALESCE(d.delivery_date, d.issue_date, d.created_at) AS lastUsedAt,
+                    ROW_NUMBER() OVER (
+                        PARTITION BY LOWER(TRIM(d.delivery_note_no))
+                        ORDER BY COALESCE(d.delivery_date, d.issue_date, d.created_at) DESC, d.id DESC
+                    ) AS rn
+                FROM documents d
+                WHERE d.delivery_note_no IS NOT NULL
+                  AND TRIM(d.delivery_note_no) <> ''
+                  ${whereClause}
+            ) x
+            WHERE x.rn = 1
+            ORDER BY x.lastUsedAt DESC, x.delivery_note_no DESC
+            LIMIT ?
+        `;
+        params.push(limit);
+
+        const [rows] = await database.query(sql, params);
+        return res.status(200).json({ message: 'success', data: rows || [] });
+    } catch (error) {
+        console.error('suggestDeliveryNotes Error:', error);
+        return res.status(500).json({ message: 'error', error: 'Internal server error' });
+    }
+}
+
+// --------------------------------------------------------------------------
 // 0c. PRICE HISTORY (ค้นหาประวัติราคาสินค้าแต่ละหน่วยงาน)
 // --------------------------------------------------------------------------
 export async function getPriceHistory(req, res) {
@@ -936,16 +995,34 @@ export async function moveBorrowToQuotation(req, res) {
 export async function updateQuotationStatus(req, res) {
     try {
         const { id } = req.params;
-        const { current_status } = req.body;
+        const { current_status, borrow_status, delivery_note_no } = req.body;
         
-        if (!current_status) {
-            return res.status(400).json({ message: "current_status is required" });
+        if (!current_status && !borrow_status && delivery_note_no === undefined) {
+            return res.status(400).json({ message: "No fields provided to update (current_status, borrow_status, or delivery_note_no)" });
         }
+
+        const setClauses = [];
+        const params = [];
+
+        if (current_status !== undefined) {
+            setClauses.push("current_status = ?");
+            params.push(current_status);
+        }
+        if (borrow_status !== undefined) {
+            setClauses.push("borrow_status = ?");
+            params.push(borrow_status);
+        }
+        if (delivery_note_no !== undefined) {
+            setClauses.push("delivery_note_no = ?");
+            params.push(delivery_note_no ? String(delivery_note_no).trim() : null);
+        }
+
+        params.push(id);
         
-        // 1. Update status
+        // 1. Update document
         await database.query(
-            "UPDATE documents SET current_status = ? WHERE id = ?",
-            [current_status, id]
+            `UPDATE documents SET ${setClauses.join(", ")} WHERE id = ?`,
+            params
         );
         
         // 2. If changing to ORDERING, create or update the order note automatically!
@@ -995,7 +1072,7 @@ export async function updateQuotationStatus(req, res) {
                     }
                 }
             }
-        } else {
+        } else if (current_status) {
             // 3. If status changed AWAY from ORDERING, delete the linked order note
             await database.query(
                 "DELETE FROM order_notes WHERE quotation_id = ?",

@@ -70,3 +70,62 @@ Stocks table check/creation completed successfully.
 [AUDIT-DEBUG] GET /get-case-info?page=1&itemsPerPage=50 → userId=3 (tae)
 [HTTP] GET /get-case-info?page=1&itemsPerPage=50
 [AUDIT-DEBUG] GET /get-case-info?page=1&itemsPerPage=50 → userId=3 (tae)
+[AUDIT-DEBUG] POST /login → NO TOKEN found in headers
+[HTTP] POST /login
+[AUDIT-DEBUG] GET /get-case-info?page=1&itemsPerPage=50 → userId=3 (tae)
+[HTTP] GET /get-case-info?page=1&itemsPerPage=50
+[AUDIT-DEBUG] GET /get-case-info?page=1&itemsPerPage=50 → userId=3 (tae)
+[AUDIT-DEBUG] GET /get-filter-options → userId=3 (tae)
+[HTTP] GET /get-filter-options
+[AUDIT-DEBUG] GET /get-filter-options → userId=3 (tae)
+[AUDIT-DEBUG] GET /get-case-detail/NB-103 → userId=3 (tae)
+[HTTP] GET /get-case-detail/NB-103
+[AUDIT-DEBUG] GET /get-case-detail/NB-103 → userId=3 (tae)
+[AUDIT-DEBUG] GET /get-case-info?page=1&itemsPerPage=50 → userId=3 (tae)
+[HTTP] GET /get-case-info?page=1&itemsPerPage=50
+[AUDIT-DEBUG] GET /get-case-info?page=1&itemsPerPage=50 → userId=3 (tae)
+[AUDIT-DEBUG] GET /get-filter-options → userId=3 (tae)
+[HTTP] GET /get-filter-options
+[AUDIT-DEBUG] GET /get-filter-options → userId=3 (tae)
+[AUDIT-DEBUG] GET /get-sent-repair-info?page=1&itemsPerPage=50 → userId=3 (tae)
+[HTTP] GET /get-sent-repair-info?page=1&itemsPerPage=50
+[AUDIT-DEBUG] GET /get-sent-repair-info?page=1&itemsPerPage=50 → userId=3 (tae)
+[AUDIT-DEBUG] GET /get-sent-repair-info?page=1&itemsPerPage=50 → userId=3 (tae)
+[AUDIT-DEBUG] GET /get-sent-repair-info?page=1&itemsPerPage=50 → userId=3 (tae)
+[AUDIT-DEBUG] GET /get-case-info?page=1&itemsPerPage=300 → userId=3 (tae)
+[HTTP] GET /get-case-info?page=1&itemsPerPage=300
+[AUDIT-DEBUG] GET /get-case-info?page=1&itemsPerPage=300 → userId=3 (tae)
+[AUDIT-DEBUG] GET /get-quotation-info?page=1&itemsPerPage=50 → userId=3 (tae)
+[HTTP] GET /get-quotation-info?page=1&itemsPerPage=50
+[AUDIT-DEBUG] GET /get-quotation-info?page=1&itemsPerPage=50 → userId=3 (tae)
+[AUDIT-DEBUG] GET /get-quotation-info?page=1&itemsPerPage=50 → userId=3 (tae)
+[AUDIT-DEBUG] GET /get-quotation-info?page=1&itemsPerPage=50 → userId=3 (tae)
+[AUDIT-DEBUG] GET /get-quotation-info?page=1&itemsPerPage=50 → userId=3 (tae)
+[AUDIT-DEBUG] GET /get-quotation-info?page=1&itemsPerPage=50&isBorrow=1 → userId=3 (tae)
+[HTTP] GET /get-quotation-info?page=1&itemsPerPage=50&isBorrow=1
+[AUDIT-DEBUG] GET /get-quotation-info?page=1&itemsPerPage=50&isBorrow=1 → userId=3 (tae)
+[AUDIT-DEBUG] GET /get-quotation-info?page=1&itemsPerPage=50&isBorrow=1 → userId=3 (tae)
+[AUDIT-DEBUG] GET /get-quotation-info?page=1&itemsPerPage=50&isBorrow=1 → userId=3 (tae)
+[AUDIT-DEBUG] GET /get-quotation-info?page=1&itemsPerPage=50&isBorrow=1 → userId=3 (tae)
+[AUDIT-DEBUG] GET /quotation/BR-191 → userId=3 (tae)
+[HTTP] GET /quotation/BR-191
+[AUDIT-DEBUG] GET /quotation/BR-191 → userId=3 (tae)
+[AUDIT-DEBUG] GET /quotation/BR-191 → userId=3 (tae)
+[AUDIT-DEBUG] GET /quotation/BR-191 → userId=3 (tae)
+[AUDIT-DEBUG] GET /quotation/BR-191 → userId=3 (tae)
+[AUDIT-DEBUG] GET /templates → userId=3 (tae)
+[HTTP] GET /templates
+[AUDIT-DEBUG] GET /templates → userId=3 (tae)
+[AUDIT-DEBUG] GET /templates → userId=3 (tae)
+[AUDIT-DEBUG] GET /templates → userId=3 (tae)
+[AUDIT-DEBUG] GET /templates → userId=3 (tae)
+[AUDIT-DEBUG] GET /templates → userId=3 (tae)
+[AUDIT-DEBUG] GET /quotation/delivery-notes/suggest?limit=5 → NO TOKEN found in headers
+[HTTP] GET /quotation/delivery-notes/suggest?limit=5
+[AUDIT-DEBUG] GET /quotation/delivery-notes/suggest?limit=5 → NO TOKEN found in headers
+[AUDIT-DEBUG] GET /quotation/delivery-notes/suggest?limit=5 → NO TOKEN found in headers
+[AUDIT-DEBUG] GET /quotation/delivery-notes/suggest?limit=5 → NO TOKEN found in headers
+[AUDIT-DEBUG] GET /quotation/delivery-notes/suggest?limit=5 → NO TOKEN found in headers
+[AUDIT-DEBUG] GET /quotation/delivery-notes/suggest?limit=5 → NO TOKEN found in headers
+[AUDIT-DEBUG] GET /quotation/delivery-notes/suggest?limit=5 → NO TOKEN found in headers
+[AUDIT-DEBUG] GET /quotation/delivery-notes/suggest?limit=5 → NO TOKEN found in headers
