@@ -1088,215 +1088,303 @@ export async function updateQuotationStatus(req, res) {
 }
 
 // --------------------------------------------------------------------------
-// 0e. GET QUOTATION EQUIPMENT SUMMARY & STOCK DEMAND
+// 0e. GET DELIVERY NOTES SUMMARY (สรุปเลขใบส่งของ/ใบกำกับภาษี)
 // --------------------------------------------------------------------------
-export async function getQuotationEquipmentSummary(req, res) {
+export async function getDeliveryNotesSummary(req, res) {
     try {
-        const {
-            page = 1,
-            itemsPerPage = 15,
-            search,
-            customerName,
-            category = 'all',
-            excludeRepair = 'true',
-            status,
-            startDate,
-            endDate,
-            sort_by,
-            sort_order
-        } = req.query;
+        const now = new Date();
+        const bangkokTime = new Date(now.toLocaleString('en-US', { timeZone: 'Asia/Bangkok' }));
 
-        const offset = (Number(page) - 1) * Number(itemsPerPage);
-        const limit = Number(itemsPerPage) || 15;
+        const currentCeYear = bangkokTime.getFullYear();
+        const currentMonth = bangkokTime.getMonth() + 1;
 
-        let whereClauses = [`d.is_borrow = 0`, `COALESCE(di.is_desc_only, 0) = 0`, `di.quantity > 0`];
-        let params = [];
-
-        if (excludeRepair === 'true' || excludeRepair === true) {
-            whereClauses.push(`
-                di.description NOT LIKE '%ซ่อม%' 
-                AND ds.section_name NOT LIKE '%ซ่อม%' 
-                AND di.description NOT LIKE '%ค่าบริการ%' 
-                AND di.description NOT LIKE '%ค่าแรง%'
-                AND ds.section_name NOT LIKE '%ค่าบริการ%'
-            `);
+        // Parse year & month from query (default to current Bangkok year & month)
+        let targetCeYear = currentCeYear;
+        if (req.query.year) {
+            const parsedY = parseInt(req.query.year, 10);
+            if (!isNaN(parsedY)) {
+                targetCeYear = parsedY > 2400 ? parsedY - 543 : parsedY;
+            }
         }
 
-        if (category === 'computer') {
-            whereClauses.push(`(
-                di.description LIKE '%คอมพิวเตอร์%' OR di.description LIKE '%Computer%' OR di.description LIKE '%PC%' 
-                OR di.description LIKE '%Workstation%' OR di.description LIKE '%AIO%' OR di.description LIKE '%All-in-One%' 
-                OR di.description LIKE '%Notebook%' OR di.description LIKE '%Laptop%' OR ds.section_name LIKE '%คอมพิวเตอร์%'
-            )`);
-        } else if (category === 'printer') {
-            whereClauses.push(`(
-                di.description LIKE '%ปริ้นเตอร์%' OR di.description LIKE '%เครื่องพิมพ์%' OR di.description LIKE '%Printer%' 
-                OR di.description LIKE '%Plotter%' OR ds.section_name LIKE '%เครื่องพิมพ์%' OR ds.section_name LIKE '%ปริ้นเตอร์%'
-            )`);
-        } else if (category === 'ups') {
-            whereClauses.push(`(
-                di.description LIKE '%UPS%' OR di.description LIKE '%เครื่องสำรองไฟ%' OR di.description LIKE '%สำรองไฟ%'
-            )`);
-        } else if (category === 'other') {
-            whereClauses.push(`(
-                di.description NOT LIKE '%คอมพิวเตอร์%' AND di.description NOT LIKE '%Computer%' AND di.description NOT LIKE '%Workstation%'
-                AND di.description NOT LIKE '%Notebook%' AND di.description NOT LIKE '%Laptop%'
-                AND di.description NOT LIKE '%ปริ้นเตอร์%' AND di.description NOT LIKE '%เครื่องพิมพ์%' AND di.description NOT LIKE '%Printer%'
-                AND di.description NOT LIKE '%UPS%' AND di.description NOT LIKE '%เครื่องสำรองไฟ%' AND di.description NOT LIKE '%สำรองไฟ%'
-            )`);
+        let targetMonth = currentMonth;
+        if (req.query.month !== undefined && req.query.month !== '' && req.query.month !== null) {
+            const parsedM = parseInt(req.query.month, 10);
+            if (!isNaN(parsedM) && parsedM >= 1 && parsedM <= 12) {
+                targetMonth = parsedM;
+            }
         }
 
-        if (search && search.trim()) {
-            whereClauses.push(`(di.description LIKE ? OR ds.section_name LIKE ?)`);
-            const s = `%${search.trim()}%`;
-            params.push(s, s);
-        }
+        const thaiYear = (targetCeYear + 543) % 100;
+        const thaiYearStr = String(thaiYear).padStart(2, '0');
+        const monthStr = String(targetMonth).padStart(2, '0');
+        const prefix = `IV${thaiYearStr}${monthStr}`;
 
-        if (customerName && customerName.trim()) {
-            whereClauses.push(`d.customer_name LIKE ?`);
-            params.push(`%${customerName.trim()}%`);
-        }
+        const { search = '', statusFilter = 'all' } = req.query;
 
-        if (status && status.trim()) {
-            whereClauses.push(`d.current_status = ?`);
-            params.push(status.trim());
-        }
-
-        if (startDate) {
-            whereClauses.push(`d.issue_date >= ?`);
-            params.push(startDate);
-        }
-        if (endDate) {
-            whereClauses.push(`d.issue_date <= ?`);
-            params.push(endDate);
-        }
-
-        const whereSql = whereClauses.length > 0 ? 'WHERE ' + whereClauses.join(' AND ') : '';
-
-        let listSql = `
+        // Fetch documents belonging to this month by prefix or date
+        const sql = `
             SELECT 
-                di.id as item_id,
-                d.id as document_id,
+                d.id,
                 d.quotation_id,
                 d.delivery_note_no,
                 d.receipt_no,
                 d.customer_name,
+                d.contact_person,
+                d.customer_phone,
+                d.current_status,
+                d.delivery_date,
+                d.delivery_date_str,
                 d.issue_date,
                 d.issue_date_str,
+                d.salesman,
+                d.remark,
                 d.created_at,
-                d.current_status,
-                ds.section_name,
-                di.description as product_name,
-                di.quantity,
-                di.unit,
-                di.unit_price,
-                (di.quantity * di.unit_price) as total_amount
-            FROM document_items di
-            JOIN document_sections ds ON ds.id = di.section_id
-            JOIN documents d ON d.id = ds.document_id
-            ${whereSql}
+                (SELECT GROUP_CONCAT(ds.section_name SEPARATOR ', ') 
+                 FROM document_sections ds 
+                 WHERE ds.document_id = d.id) as section_names,
+                COALESCE((
+                    SELECT SUM(di.quantity * di.unit_price)
+                    FROM document_sections ds
+                    JOIN document_items di ON di.section_id = ds.id
+                    WHERE ds.document_id = d.id
+                ), 0) as total
+            FROM documents d
+            WHERE d.is_borrow = 0
+              AND d.delivery_note_no LIKE CONCAT(?, '%')
+            ORDER BY d.delivery_note_no ASC, d.id ASC
         `;
 
-        let countSql = `
-            SELECT COUNT(*) as total
-            FROM document_items di
-            JOIN document_sections ds ON ds.id = di.section_id
-            JOIN documents d ON d.id = ds.document_id
-            ${whereSql}
-        `;
+        const [docs] = await database.query(sql, [prefix]);
 
-        const allowedSort = {
-            'customer_name': 'd.customer_name',
-            'product_name': 'di.description',
-            'quantity': 'di.quantity',
-            'issue_date': 'COALESCE(d.issue_date, d.created_at)',
-            'quotation_id': 'd.quotation_id'
-        };
-        const sortCol = allowedSort[sort_by] || 'COALESCE(d.issue_date, d.created_at)';
-        const order = sort_order === 'asc' ? 'ASC' : 'DESC';
+        // Group documents by trimmed uppercase delivery_note_no
+        const docMap = new Map();
+        let maxSeq = 0;
 
-        const listParams = [...params];
-        listSql += ` ORDER BY ${sortCol} ${order} LIMIT ? OFFSET ?`;
-        listParams.push(limit, offset);
+        docs.forEach(doc => {
+            const rawNo = (doc.delivery_note_no || '').trim();
+            if (!rawNo) return;
+            const upperNo = rawNo.toUpperCase();
+            if (!docMap.has(upperNo)) {
+                docMap.set(upperNo, []);
+            }
+            docMap.get(upperNo).push(doc);
 
-        const [items] = await database.query(listSql, listParams);
-        const [countRes] = await database.query(countSql, params);
-        const totalItems = countRes[0]?.total || 0;
+            if (upperNo.startsWith(prefix.toUpperCase())) {
+                const suffix = rawNo.substring(prefix.length);
+                const seqMatch = suffix.match(/^\d+/);
+                if (seqMatch) {
+                    const seqVal = parseInt(seqMatch[0], 10);
+                    if (!isNaN(seqVal) && seqVal > maxSeq) {
+                        maxSeq = seqVal;
+                    }
+                }
+            }
+        });
 
-        let statsSql = `
-            SELECT 
-                SUM(CASE WHEN 
-                    di.description LIKE '%คอมพิวเตอร์%' OR di.description LIKE '%Computer%' OR di.description LIKE '%PC%' 
-                    OR di.description LIKE '%Workstation%' OR di.description LIKE '%AIO%' OR di.description LIKE '%All-in-One%' 
-                    OR di.description LIKE '%Notebook%' OR di.description LIKE '%Laptop%' OR ds.section_name LIKE '%คอมพิวเตอร์%'
-                THEN di.quantity ELSE 0 END) as total_computers,
-                
-                SUM(CASE WHEN 
-                    di.description LIKE '%ปริ้นเตอร์%' OR di.description LIKE '%เครื่องพิมพ์%' OR di.description LIKE '%Printer%' 
-                    OR di.description LIKE '%Plotter%' OR ds.section_name LIKE '%เครื่องพิมพ์%' OR ds.section_name LIKE '%ปริ้นเตอร์%'
-                THEN di.quantity ELSE 0 END) as total_printers,
-                
-                SUM(CASE WHEN 
-                    di.description LIKE '%UPS%' OR di.description LIKE '%เครื่องสำรองไฟ%' OR di.description LIKE '%สำรองไฟ%'
-                THEN di.quantity ELSE 0 END) as total_ups,
+        const allItems = [];
+        const processedKeys = new Set();
 
-                SUM(CASE WHEN 
-                    di.description NOT LIKE '%คอมพิวเตอร์%' AND di.description NOT LIKE '%Computer%' AND di.description NOT LIKE '%Workstation%'
-                    AND di.description NOT LIKE '%Notebook%' AND di.description NOT LIKE '%Laptop%'
-                    AND di.description NOT LIKE '%ปริ้นเตอร์%' AND di.description NOT LIKE '%เครื่องพิมพ์%' AND di.description NOT LIKE '%Printer%'
-                    AND di.description NOT LIKE '%UPS%' AND di.description NOT LIKE '%เครื่องสำรองไฟ%' AND di.description NOT LIKE '%สำรองไฟ%'
-                THEN di.quantity ELSE 0 END) as total_others,
-
-                COUNT(DISTINCT d.customer_name) as total_customers,
-                SUM(di.quantity) as total_quantity
-            FROM document_items di
-            JOIN document_sections ds ON ds.id = di.section_id
-            JOIN documents d ON d.id = ds.document_id
-            ${whereSql}
-        `;
-        const [statsRes] = await database.query(statsSql, params);
-        const summaryStats = {
-            totalComputers: Number(statsRes[0]?.total_computers || 0),
-            totalPrinters: Number(statsRes[0]?.total_printers || 0),
-            totalUps: Number(statsRes[0]?.total_ups || 0),
-            totalOthers: Number(statsRes[0]?.total_others || 0),
-            totalCustomers: Number(statsRes[0]?.total_customers || 0),
-            totalQuantity: Number(statsRes[0]?.total_quantity || 0)
+        const formatThaiDate = (dateVal) => {
+            if (!dateVal) return '-';
+            const d = new Date(dateVal);
+            if (isNaN(d.getTime())) return '-';
+            const bangkokStr = d.toLocaleString('en-US', { timeZone: 'Asia/Bangkok' });
+            const bDate = new Date(bangkokStr);
+            const day = String(bDate.getDate()).padStart(2, '0');
+            const month = String(bDate.getMonth() + 1).padStart(2, '0');
+            const yearBE = bDate.getFullYear() + 543;
+            return `${day}-${month}-${yearBE}`;
         };
 
-        let demandSql = `
-            SELECT 
-                TRIM(di.description) as product_name,
-                MAX(di.unit) as unit,
-                SUM(di.quantity) as total_demand_qty,
-                COUNT(DISTINCT d.customer_name) as customer_count,
-                GROUP_CONCAT(DISTINCT d.customer_name SEPARATOR '|||') as customer_list
-            FROM document_items di
-            JOIN document_sections ds ON ds.id = di.section_id
-            JOIN documents d ON d.id = ds.document_id
-            ${whereSql}
-            GROUP BY TRIM(di.description)
-            ORDER BY total_demand_qty DESC
-            LIMIT 50
-        `;
-        const [demandRows] = await database.query(demandSql, params);
-        const stockDemand = demandRows.map(row => ({
-            product_name: row.product_name,
-            unit: row.unit || 'เครื่อง',
-            total_demand_qty: Number(row.total_demand_qty || 0),
-            customer_count: Number(row.customer_count || 0),
-            customers: row.customer_list ? row.customer_list.split('|||') : []
-        }));
+        const mapStatusLabel = (status) => {
+            const map = {
+                QUOTATION: "ใบเสนอราคา",
+                ORDERING: "กำลังสั่งของ",
+                ITEMS_READY: "ของครบพร้อมส่ง",
+                DELIVERY_NOTE: "ใบส่งของ",
+                RECEIPT: "ใบเสร็จรับเงิน",
+                BORROW: "ใบยืม",
+                CANCELLED: "ยกเลิก"
+            };
+            return map[status] || status || "ไม่ระบุ";
+        };
+
+        // 1. Build sequence from 1 to maxSeq (ordered from least to greatest)
+        for (let s = 1; s <= maxSeq; s++) {
+            const seqStr = String(s).padStart(3, '0');
+            const ivNo = `${prefix}${seqStr}`;
+            processedKeys.add(ivNo.toUpperCase());
+
+            const docsForIv = docMap.get(ivNo.toUpperCase()) || [];
+            const activeDoc = docsForIv.find(d => d.current_status !== 'CANCELLED');
+            const cancelledDoc = docsForIv.find(d => d.current_status === 'CANCELLED');
+
+            if (activeDoc) {
+                const creationDateStr = activeDoc.created_at ? formatThaiDate(activeDoc.created_at) : (activeDoc.issue_date_str || '-');
+                allItems.push({
+                    seq: s,
+                    delivery_note_no: activeDoc.delivery_note_no,
+                    display_no: activeDoc.delivery_note_no,
+                    is_cash_sale: false,
+                    status: activeDoc.current_status,
+                    status_label: mapStatusLabel(activeDoc.current_status),
+                    document_id: activeDoc.id,
+                    quotation_id: activeDoc.quotation_id || '-',
+                    customer_name: activeDoc.customer_name || '-',
+                    original_customer: null,
+                    contact_person: activeDoc.contact_person || '',
+                    customer_phone: activeDoc.customer_phone || '',
+                    created_at: activeDoc.created_at || null,
+                    created_date: creationDateStr,
+                    delivery_date: creationDateStr,
+                    total: Number(activeDoc.total) || 0,
+                    section_names: activeDoc.section_names || '-',
+                    salesman: activeDoc.salesman || '',
+                    remark: activeDoc.remark || '',
+                    cash_sale_reason: ''
+                });
+            } else if (cancelledDoc) {
+                // Quotation has delivery note cancelled -> display as "ขายสด"
+                const creationDateStr = cancelledDoc.created_at ? formatThaiDate(cancelledDoc.created_at) : (cancelledDoc.issue_date_str || '-');
+                allItems.push({
+                    seq: s,
+                    delivery_note_no: ivNo,
+                    display_no: 'ขายสด',
+                    is_cash_sale: true,
+                    status: 'CASH_SALE',
+                    status_label: 'ขายสด',
+                    document_id: cancelledDoc.id,
+                    quotation_id: cancelledDoc.quotation_id || cancelledDoc.id || '-',
+                    customer_name: 'ขายสด',
+                    original_customer: cancelledDoc.customer_name,
+                    contact_person: cancelledDoc.contact_person || '',
+                    customer_phone: cancelledDoc.customer_phone || '',
+                    created_at: cancelledDoc.created_at || null,
+                    created_date: creationDateStr,
+                    delivery_date: creationDateStr,
+                    total: 0,
+                    section_names: cancelledDoc.section_names || '-',
+                    salesman: cancelledDoc.salesman || '',
+                    remark: cancelledDoc.remark || '',
+                    cash_sale_reason: `ยกเลิกใบส่งของ (${cancelledDoc.quotation_id || cancelledDoc.id})`
+                });
+            } else {
+                // Gap in sequence -> display as "ขายสด"
+                allItems.push({
+                    seq: s,
+                    delivery_note_no: ivNo,
+                    display_no: 'ขายสด',
+                    is_cash_sale: true,
+                    status: 'CASH_SALE',
+                    status_label: 'ขายสด',
+                    document_id: null,
+                    quotation_id: '-',
+                    customer_name: 'ขายสด',
+                    original_customer: null,
+                    contact_person: '',
+                    customer_phone: '',
+                    created_at: null,
+                    created_date: '-',
+                    delivery_date: '-',
+                    total: 0,
+                    section_names: '-',
+                    salesman: '',
+                    remark: '',
+                    cash_sale_reason: 'ขายสด (ไม่มีในระบบใบเสนอราคา)'
+                });
+            }
+        }
+
+        // 2. Include any other delivery notes that weren't in the prefix 1..maxSeq sequence
+        docs.forEach(doc => {
+            const rawNo = (doc.delivery_note_no || '').trim();
+            if (!rawNo) return;
+            const key = rawNo.toUpperCase();
+            if (!processedKeys.has(key)) {
+                processedKeys.add(key);
+                const isCancelled = doc.current_status === 'CANCELLED';
+                const creationDateStr = doc.created_at ? formatThaiDate(doc.created_at) : (doc.issue_date_str || '-');
+                allItems.push({
+                    seq: null,
+                    delivery_note_no: doc.delivery_note_no,
+                    display_no: isCancelled ? 'ขายสด' : doc.delivery_note_no,
+                    is_cash_sale: isCancelled,
+                    status: isCancelled ? 'CASH_SALE' : doc.current_status,
+                    status_label: isCancelled ? 'ขายสด' : mapStatusLabel(doc.current_status),
+                    document_id: doc.id,
+                    quotation_id: doc.quotation_id || doc.id || '-',
+                    customer_name: isCancelled ? 'ขายสด' : (doc.customer_name || '-'),
+                    original_customer: isCancelled ? doc.customer_name : null,
+                    contact_person: doc.contact_person || '',
+                    customer_phone: doc.customer_phone || '',
+                    created_at: doc.created_at || null,
+                    created_date: creationDateStr,
+                    delivery_date: creationDateStr,
+                    total: isCancelled ? 0 : (Number(doc.total) || 0),
+                    section_names: doc.section_names || '-',
+                    salesman: doc.salesman || '',
+                    remark: doc.remark || '',
+                    cash_sale_reason: isCancelled ? `ยกเลิกใบส่งของ (${doc.quotation_id || doc.id})` : ''
+                });
+            }
+        });
+
+        // 3. Sort descending (from greatest to least: มากไปน้อย)
+        allItems.sort((a, b) => {
+            if (a.seq !== null && b.seq !== null) {
+                return b.seq - a.seq;
+            }
+            if (a.seq !== null) return -1;
+            if (b.seq !== null) return 1;
+            return (b.delivery_note_no || '').localeCompare(a.delivery_note_no || '', undefined, { numeric: true });
+        });
+
+        // 4. Calculate summary stats
+        const summary = {
+            total: allItems.length,
+            activeCount: allItems.filter(i => !i.is_cash_sale).length,
+            cashSaleCount: allItems.filter(i => i.is_cash_sale).length,
+            totalAmount: allItems.reduce((acc, curr) => acc + (curr.total || 0), 0),
+            prefix,
+            maxSeq
+        };
+
+        // 5. Apply filters if requested
+        let filteredItems = allItems;
+
+        if (statusFilter === 'active') {
+            filteredItems = filteredItems.filter(i => !i.is_cash_sale);
+        } else if (statusFilter === 'cash_sale') {
+            filteredItems = filteredItems.filter(i => i.is_cash_sale);
+        }
+
+        if (search && search.trim()) {
+            const q = search.trim().toLowerCase();
+            filteredItems = filteredItems.filter(i => {
+                return (
+                    (i.delivery_note_no && i.delivery_note_no.toLowerCase().includes(q)) ||
+                    (i.quotation_id && i.quotation_id.toLowerCase().includes(q)) ||
+                    (i.customer_name && i.customer_name.toLowerCase().includes(q)) ||
+                    (i.original_customer && i.original_customer.toLowerCase().includes(q)) ||
+                    (i.document_id && i.document_id.toLowerCase().includes(q)) ||
+                    (i.display_no && i.display_no.toLowerCase().includes(q))
+                );
+            });
+        }
 
         return res.json({
             message: 'success',
-            data: items,
-            totalItems,
-            summaryStats,
-            stockDemand
+            year: targetCeYear,
+            thaiYear,
+            month: targetMonth,
+            prefix,
+            summary,
+            items: filteredItems,
+            totalItems: filteredItems.length
         });
     } catch (error) {
-        console.error('getQuotationEquipmentSummary Error:', error);
+        console.error('getDeliveryNotesSummary Error:', error);
         return res.status(500).json({ message: 'error', error: 'Internal server error' });
     }
 }
