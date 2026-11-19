@@ -323,6 +323,7 @@ export async function getAllQuotations(req, res) {
                 d.issue_date, 
                 d.issue_date_str,
                 d.created_at,
+                d.updated_at,
                 d.is_borrow,
                 d.borrow_status,
                 d.from_borrow_id,
@@ -439,6 +440,7 @@ export async function getAllQuotations(req, res) {
                 'customerName': 'd.customer_name',
                 'status': 'd.current_status',
                 'issueDate': 'd.issue_date',
+                'updatedDate': 'd.updated_at',
                 'total': 'total' // Calculated column, no table alias
             };
 
@@ -695,7 +697,7 @@ export async function updateQuotation(req, res) {
             cheque_bank = ?, cheque_branch = ?, cheque_no = ?, cheque_amount = ?, cheque_date_str = ?, cheque_date = ?,
             goods_received_check_date_str = ?, goods_received_check_date = ?, money_receiver_name = ?, money_receive_date_str = ?, money_receive_date = ?, receipt_authorized_signer = ?,
             delivery_copy_date = ?, delivery_copy_date_str = ?, receipt_copy_date = ?, receipt_copy_date_str = ?,
-            is_borrow = ?, borrow_status = ?, item_group_name = ?
+            is_borrow = ?, borrow_status = ?, item_group_name = ?, updated_at = CURRENT_TIMESTAMP
             WHERE id = ?`; // Update record ที่มี System ID ตรงกัน
 
         const updateParams = [
@@ -1000,7 +1002,7 @@ export async function moveBorrowToQuotation(req, res) {
 
         // 7. Update source borrow slip status to REQUISITIONED and ensure delivery note number is saved
         await conn.query(
-            `UPDATE documents SET borrow_status = 'REQUISITIONED', delivery_note_no = ? WHERE id = ?`,
+            `UPDATE documents SET borrow_status = 'REQUISITIONED', delivery_note_no = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`,
             [newDeliveryNoteNo, id]
         );
 
@@ -1063,6 +1065,7 @@ export async function updateQuotationStatus(req, res) {
             setClauses.push("delivery_note_no = ?");
             params.push(delivery_note_no ? String(delivery_note_no).trim() : null);
         }
+        setClauses.push("updated_at = CURRENT_TIMESTAMP");
 
         params.push(id);
         

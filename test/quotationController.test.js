@@ -32,7 +32,12 @@ async function setup(initial = [{ id: 'QT-1410', current_status: 'DELIVERY_NOTE'
                 assert.equal((query.match(/\?/g) || []).length, params.length, 'document update placeholders');
                 const doc = state.documents.find(doc => doc.id === params.at(-1));
                 const assignments = query.match(/SET (.*?) WHERE id = \?/)[1].split(',');
-                assignments.forEach((assignment, index) => { doc[assignment.split('=')[0].trim()] = params[index]; });
+                let parameterIndex = 0;
+                assignments.forEach(assignment => {
+                    const [field, value] = assignment.split('=').map(part => part.trim());
+                    if (value === '?') doc[field] = params[parameterIndex++];
+                    else if (value === 'CURRENT_TIMESTAMP') doc[field] = new Date().toISOString();
+                });
                 return [{ affectedRows: 1 }];
             }
             if (query.startsWith('INSERT INTO document_sections')) {
@@ -202,3 +207,14 @@ test('document reads return the optional name while preserving the legacy sectio
     assert.equal(detail.body.item_group_name, 'ชื่อรวม');
     assert.equal(detail.body.productSections[0].section_name, 'หน้าเดิม');
 });
+
+for (const handler of ['updateQuotation', 'updateQuotationStatus']) {
+    test(`${handler} refreshes the modified date while preserving the creation date`, async () => {
+        const originalDate = '2020-01-01T00:00:00.000Z';
+        const { state, request } = await setup([{ id: 'QT-1410', current_status: 'QUOTATION', created_at: originalDate, updated_at: originalDate }]);
+        const response = await request(handler, { current_status: 'QUOTATION', productSections: [{ section_name: 'แก้ไขรายการสินค้า', items: [] }] });
+        assert.equal(response.statusCode, 200);
+        assert.notEqual(state.documents[0].updated_at, originalDate);
+        assert.equal(state.documents[0].created_at, originalDate);
+    });
+}
