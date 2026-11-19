@@ -21,6 +21,16 @@ import { optionalAuthenticate } from '../middleware/authenticate.js';
 
 const router = express.Router();
 
+const quotationChangeDetail = ({ req, res, responseBody }) => ({
+    previous_status: res.locals.quotationBefore?.current_status,
+    current_status: req.body.current_status,
+    previous_delivery_note_no: res.locals.quotationBefore?.delivery_note_no,
+    delivery_note_no: req.body.delivery_note_no,
+    expected_current_status: req.body.expected_current_status,
+    confirm_status_rollback: req.body.confirm_status_rollback,
+    conflict_code: responseBody?.code,
+});
+
 router.use(optionalAuthenticate);
 
 // Define routes
@@ -56,6 +66,7 @@ router.put('/quotation/:id', auditEvent({
     failAction: 'QUOTATION_UPDATED',
     failSeverity: 'warning',
     entityIdResolver: ({ req }) => req.params?.id || null,
+    detailBuilder: quotationChangeDetail,
 }), updateQuotation);
 router.put('/quotation/:id/status', auditEvent({
     module: 'quotation',
@@ -64,6 +75,7 @@ router.put('/quotation/:id/status', auditEvent({
     failAction: 'QUOTATION_STATUS_UPDATED',
     failSeverity: 'warning',
     entityIdResolver: ({ req }) => req.params?.id || null,
+    detailBuilder: quotationChangeDetail,
 }), updateQuotationStatus);
 router.delete('/quotation/:id', auditEvent({
     module: 'quotation',

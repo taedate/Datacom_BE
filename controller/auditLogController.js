@@ -1,13 +1,12 @@
 import database from '../service/database.js';
 
-const MODULES = new Set(['auth', 'invite', 'user', 'repair', 'sentRepair', 'project', 'quotation', 'system']);
-const STATUS = new Set(['success', 'fail']);
-
 import {
     AUDIT_ACTIONS,
     AUDIT_MODULES,
     AUDIT_STATUS,
 } from '../service/auditLogCatalog.js';
+const MODULES = AUDIT_MODULES;
+const STATUS = AUDIT_STATUS;
 
 function codedError(res, status, code, detail) {
     return res.status(status).json({ message: 'error', code, detail });
@@ -208,6 +207,8 @@ export async function getAuditLogs(req, res) {
             if (requestIdExpr !== 'NULL') searchable.push(`${requestIdExpr} LIKE ?`);
             if (entityIdExpr !== 'NULL') searchable.push(`${entityIdExpr} LIKE ?`);
             if (actionExpr !== 'NULL') searchable.push(`${actionExpr} LIKE ?`);
+            if (detailExpr !== 'NULL') searchable.push(`${detailExpr} LIKE ?`);
+            if (canJoinUsers) searchable.push(`EXISTS (SELECT 1 FROM users searchUser WHERE searchUser.userId = ${performedByExpr} AND searchUser.userName LIKE ?)`);
 
             if (searchable.length > 0) {
                 whereSql += ` AND (${searchable.join(' OR ')})`;
@@ -241,9 +242,9 @@ export async function getAuditLogs(req, res) {
         if (entityStatus && (columns.has('detail') || columns.has('meta'))) {
             const detailCol = columns.has('detail') ? 'a.detail' : 'a.meta';
             // Search across all known status keys in the JSON detail
-            const jsonKeys = ['caseStatus', 'newStatus', 'pStatus', 'sentRepairStatus', 'current_status'];
+            const jsonKeys = ['caseStatus', 'newStatus', 'pStatus', 'sentRepairStatus', 'current_status', 'before.current_status', 'after.current_status', 'before.borrow_status', 'after.borrow_status', 'before.caseStatus', 'after.caseStatus', 'before.pStatus', 'after.pStatus', 'before.sentRepairStatus', 'after.sentRepairStatus'];
             const jsonConditions = jsonKeys.map(
-                (k) => `JSON_UNQUOTE(JSON_EXTRACT(${detailCol}, '$.${k}')) = ?`
+                (k) => `JSON_UNQUOTE(JSON_EXTRACT(IF(JSON_VALID(${detailCol}), ${detailCol}, JSON_OBJECT()), '$.${k}')) = ?`
             );
             whereSql += ` AND (${jsonConditions.join(' OR ')})`;
             for (let i = 0; i < jsonKeys.length; i += 1) {
@@ -349,9 +350,16 @@ const ENTITY_STATUSES = {
         keys: ['current_status', 'newStatus'],
         values: [
             'QUOTATION',
+            'ORDERING',
+            'ITEMS_READY',
             'DELIVERY_NOTE',
             'RECEIPT',
+            'BORROW',
             'CANCELLED',
+            'BORROWED',
+            'RETURNED',
+            'REQUISITIONED',
+            'WAIT_REQUISITION',
         ],
     },
 };

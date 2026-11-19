@@ -6,6 +6,11 @@ export const AUDIT_MODULES = new Set([
     'sentRepair',
     'project',
     'quotation',
+    'customer',
+    'stock',
+    'ink_price',
+    'template',
+    'order_note',
     'system',
 ]);
 
@@ -20,6 +25,11 @@ export const AUDIT_ENTITY_TYPES = new Set([
     'caseSentRepair',
     'project',
     'quotation',
+    'customer',
+    'stock',
+    'ink_price',
+    'template',
+    'order_note',
 ]);
 
 export const AUDIT_ACTIONS = new Set([
@@ -45,6 +55,7 @@ export const AUDIT_ACTIONS = new Set([
     'CASE_CREATED',
     'CASE_UPDATED',
     'CASE_STATUS_CHANGED',
+    'CASE_STATUS_UPDATED',
     'CASE_DELETED',
     'CASE_PRINTED',
 
@@ -62,13 +73,31 @@ export const AUDIT_ACTIONS = new Set([
     'QUOTATION_CREATED',
     'QUOTATION_UPDATED',
     'QUOTATION_STATUS_CHANGED',
+    'QUOTATION_STATUS_UPDATED',
     'QUOTATION_DELETED',
     'QUOTATION_EXPORTED',
 
     'BORROW_CREATED',
     'BORROW_UPDATED',
+    'BORROW_STATUS_CHANGED',
     'BORROW_DELETED',
     'BORROW_CONVERTED_TO_QUOTATION',
+
+    'CUSTOMER_CREATED',
+    'CUSTOMER_UPDATED',
+    'CUSTOMER_DELETED',
+    'STOCK_CREATED',
+    'STOCK_UPDATED',
+    'STOCK_DELETED',
+    'INK_PRICE_CREATED',
+    'INK_PRICE_UPDATED',
+    'INK_PRICE_DELETED',
+    'TEMPLATE_CREATED',
+    'TEMPLATE_UPDATED',
+    'TEMPLATE_DELETED',
+    'ORDER_NOTE_CREATED',
+    'ORDER_NOTE_UPDATED',
+    'ORDER_NOTE_DELETED',
 
     'FORBIDDEN_ACCESS',
     'VALIDATION_ERROR',

@@ -5,6 +5,7 @@ CREATE TABLE IF NOT EXISTS documents (
     
     -- เลขที่ใบเสนอราคา (แยกเก็บตาม requirement)
     quotation_id VARCHAR(50),
+    item_group_name VARCHAR(255) NULL DEFAULT NULL, -- ชื่อรวมที่ตั้งเอง (ไม่เปลี่ยนชื่อกลุ่มย่อย)
     
     -- Status Tracking
     current_status ENUM('QUOTATION', 'DELIVERY_NOTE', 'RECEIPT', 'CANCELLED') DEFAULT 'QUOTATION',

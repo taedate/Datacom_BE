@@ -1,5 +1,11 @@
 # Datacom_BE
 
+## Optional item group name
+
+Before deploying the item group name feature, run `node db/run_item_group_name_migration.js` from this directory. The migration only adds the nullable `documents.item_group_name` column and can be run again safely; it does not rename or backfill existing documents or sections.
+
+The quotation API accepts an optional `item_group_name` (up to 255 characters). Omitting it during an update preserves its saved value; sending an empty string or `null` clears it and restores the existing automatic naming behavior.
+
 ## LINE Chatbot (Integrated)
 
 This project now includes LINE webhook chatbot endpoints in the same Node/Express app.
