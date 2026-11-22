@@ -51,6 +51,16 @@ async function setup(records = {}) {
 
 const delivery = { id: 'QT-1410', current_status: 'DELIVERY_NOTE', delivery_note_no: 'IV6911085', quotation_id: 'DATA69-1101/2026', is_borrow: 0, customer_name: 'ลูกค้าทดสอบ' };
 
+test('preparing a repair PDF records one event even when the saved record is unchanged', async () => {
+    const { logs, run } = await setup({ caseRepair: [{ caseId: 'PC-100', caseStatus: 'รับเครื่องแล้ว', brokenSymptom: 'เปิดไม่ติด' }] });
+    await run({ module: 'repair', entityType: 'caseRepair', successAction: 'CASE_PRINT_PREPARED' }, undefined,
+        { id: 'PC-100', url: '/prepare-case-print', method: 'POST', body: { caseId: 'PC-100' } });
+    assert.equal(logs.length, 1);
+    assert.equal(logs[0].action, 'CASE_PRINT_PREPARED');
+    assert.equal(logs[0].entityId, 'PC-100');
+    assert.deepEqual(logs[0].detail.changes, []);
+});
+
 test('records the old and new status and bill number in one event without private contact data', async () => {
     const { logs, run } = await setup({ documents: [{ ...delivery, customer_phone: '0891234567', customer_address: 'private-address', password: 'never-log-this' }] });
     await run({}, tables => Object.assign(tables.documents[0], { current_status: 'QUOTATION', delivery_note_no: '' }));
@@ -107,6 +117,31 @@ test('editing an item description at the same price records a summary instead of
     assert.equal(logs.length, 1);
     assert.ok(logs[0].detail.changes.some(change => change.summary === 'แก้ไขรายการสินค้า'));
     assert.doesNotMatch(JSON.stringify(logs), /old-item|new-private-item-description/);
+});
+
+test('shared note creation, editing and deletion record concise business events', async () => {
+    const { logs, run } = await setup({ shared_notes: [] });
+    const config = { module: 'shared_note', entityType: 'shared_note' };
+    await run({ ...config, successAction: 'SHARED_NOTE_CREATED' }, tables => {
+        tables.shared_notes.push({ id: 1, created_by_name: 'ผู้จด', body: 'private-note-before' });
+    }, { id: '1', method: 'POST', url: '/shared-notes' });
+    await run({ ...config, successAction: 'SHARED_NOTE_UPDATED' }, tables => {
+        tables.shared_notes[0].body = 'private-note-after';
+    }, { id: '1', url: '/shared-notes/1' });
+    await run({ ...config, successAction: 'SHARED_NOTE_DELETED' }, tables => {
+        tables.shared_notes = [];
+    }, { id: '1', method: 'DELETE', url: '/shared-notes/1' });
+    assert.deepEqual(logs.map(log => log.action), ['SHARED_NOTE_CREATED', 'SHARED_NOTE_UPDATED', 'SHARED_NOTE_DELETED']);
+    assert.equal(logs[1].detail.changes[0].summary, 'แก้ไขข้อความโน้ต');
+    assert.equal(logs[2].detail.before.created_by_name, 'ผู้จด');
+    assert.doesNotMatch(JSON.stringify(logs), /private-note-before|private-note-after/);
+});
+
+test('replacing an attachment records an event even when its count and note text stay the same',async()=>{
+    const {logs,run}=await setup({shared_notes:[{id:1,created_by_name:'ผู้จด',body:'ข้อความเดิม',attachment_count:1,attachment_ids:['old-file']}]});
+    await run({module:'shared_note',entityType:'shared_note',successAction:'SHARED_NOTE_UPDATED'},tables=>{tables.shared_notes[0].attachment_ids=['new-file'];},{id:'1',url:'/shared-notes/1'});
+    assert.equal(logs.length,1);assert.equal(logs[0].detail.changes[0].summary,'แก้ไขไฟล์แนบ');
+    assert.doesNotMatch(JSON.stringify(logs),/old-file|new-file/);
 });
 
 test('deleting a document retains its last bill number for later investigation', async () => {

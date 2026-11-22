@@ -47,10 +47,16 @@ const definitions = {
         groups: { 'รายละเอียดหมึก': ['description'] },
     },
     template: { table: 'quotation_templates', key: 'id', name: 'name', fields: { name: 'ชื่อแบบฟอร์ม' } },
+    product_description: { table: 'product_descriptions', key: 'id', name: 'description', fields: { description: 'ข้อความสินค้า', category: 'หมวดหมู่' } },
     order_note: {
         table: 'order_notes', key: 'id', name: 'department',
         fields: { department: 'หน่วยงาน', quotation_id: 'เอกสารที่เกี่ยวข้อง' },
         groups: { 'รายการสั่งซื้อ': ['body'] },
+    },
+    shared_note: {
+        table: 'shared_notes', key: 'id', name: 'created_by_name',
+        fields: { created_by_name: 'ผู้จดโน้ต', attachment_count: 'จำนวนไฟล์แนบ' },
+        groups: { 'ข้อความโน้ต': ['body'], 'ไฟล์แนบ': ['attachment_ids'] },
     },
 };
 

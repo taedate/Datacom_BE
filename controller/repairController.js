@@ -1,4 +1,6 @@
 import database from "../service/database.js";
+import { makeAuditSnapshot } from '../service/auditEntityService.js';
+import { mergeRepairInput, repairFields, repairResponse, repairRevision } from '../service/repairRecord.js';
 
 // Helper: แมปสถานะ -> คอลัมน์วันที่ในฐานข้อมูล
 function getStatusDateColumn(status) {
@@ -35,6 +37,7 @@ function formatThaiDate(dateValue) {
 }
 
 export async function getCaseInfo(req, res) {
+    res.set('Cache-Control', 'no-store');
     try {
         const { page = 1, itemsPerPage = 10, search, caseStatus, caseType, dateRange, sort_by, sort_order, lastDate, customerName, caseInstitution, caseSN, caseBrand, caseModel } = req.query;
         const parsedItemsPerPage = Number(itemsPerPage);
@@ -159,9 +162,9 @@ export async function getCaseInfo(req, res) {
             // ป้องกัน SQL Injection ตรง sort_by เล็กน้อย (ควร validate ว่า column มีจริงไหม)
             const allowedSorts = ['caseId', 'created_at', 'datePickUp', 'cusFirstName'];
             const safeSort = allowedSorts.includes(sort_by) ? sort_by : 'created_at';
-            sql += ` ORDER BY ${safeSort} ${sort_order === 'asc' ? 'ASC' : 'DESC'}`;
+            sql += ` ORDER BY c.${safeSort} ${sort_order === 'asc' ? 'ASC' : 'DESC'}${safeSort === 'caseId' ? '' : ', c.caseId DESC'}`;
         } else {
-            sql += ` ORDER BY created_at DESC`;
+            sql += ` ORDER BY c.created_at DESC, c.caseId DESC`;
         }
 
         // Pagination (offset-based for smaller page numbers)
@@ -223,24 +226,9 @@ export async function getCaseDetail(req, res) {
         if (rows.length === 0) {
             return res.status(404).json({ message: 'error', error: 'Case not found' });
         }
-        const caseData = rows[0];
-        let repairItems = [];
-        if (caseData.repairDetails) {
-            try {
-                const parsed = JSON.parse(caseData.repairDetails);
-                if (Array.isArray(parsed)) {
-                    repairItems = parsed;
-                }
-            } catch (e) {
-                repairItems = [{
-                    description: caseData.repairDetails,
-                    cost: caseData.repairCost,
-                    price: caseData.repairPrice
-                }];
-            }
-        }
-        caseData.repairItems = repairItems;
-        res.json({ message: 'success', data: caseData });
+        res.set('Cache-Control', 'no-store');
+        const data = repairResponse(rows[0]);
+        res.json({ message: 'success', data, revision: data.revision });
     } catch (error) {
         res.status(500).json({ message: 'error', error: error.message });
     }
@@ -248,140 +236,83 @@ export async function getCaseDetail(req, res) {
 
 // 2. สร้างงานซ่อมใหม่ (Create)
 export async function createCase(req, res) {
+    let values;
+    try { values = mergeRepairInput({ ...req.body, caseStatus: req.body.caseStatus || 'รับเครื่องแล้ว' }); }
+    catch (error) { return res.status(400).json({ message: 'error', detail: error.message }); }
+    const prefixes = { 'ซ่อมคอมพิวเตอร์': 'PC', 'ซ่อมโน็ตบุ๊ค': 'NB', 'ซ่อมปริ้นเตอร์': 'PR', 'ซ่อมมือถือ/แท็บเล็ต': 'MB', 'ลงโปรแกรม/OS': 'SW', UPS: 'UP', 'เปลี่ยนอะไหล่': 'SP', 'กู้ข้อมูล': 'DR', 'อื่นๆ': 'OT' };
+    const prefix = prefixes[values.caseType] || 'CT';
+    let connection, locked = false;
     try {
-        const {
-            cusFirstName, cusLastName, cusPhone, caseInstitution,
-            brokenSymptom, caseType, caseStatus,
-            caseBrand, caseModel, caseSN, caseDurableArticles, caseEquipment,
-            repairDetails, repairCost, repairPrice,
-            datePickUp, dateBeforePicUp, dateComplete, dateDelivered, staffName
-        } = req.body;
-
-        // 1. กำหนด Prefix ตามประเภท
-        console.log("Create Case Request Type:", caseType, "| Length:", caseType ? caseType.length : 0);
-        let prefix = "CT"; 
-        switch (caseType) {
-            case "ซ่อมคอมพิวเตอร์": prefix = "PC"; break;
-            case "ซ่อมโน็ตบุ๊ค": prefix = "NB"; break;
-            case "ซ่อมปริ้นเตอร์": prefix = "PR"; break;
-            case "ซ่อมมือถือ/แท็บเล็ต": prefix = "MB"; break;
-            case "ลงโปรแกรม/OS": prefix = "SW"; break;
-            case "UPS": prefix = "UP"; break;
-            case "เปลี่ยนอะไหล่": prefix = "SP"; break; // SP = Spare Part
-            case "กู้ข้อมูล": prefix = "DR"; break;   // DR = Data Recovery
-            case "อื่นๆ": prefix = "OT"; break;       // OT = Other
-            default: prefix = "CT";
-        }
-
-        // 2. หา ID ล่าสุดของ Prefix นี้
-        const [lastRows] = await database.query(
-            `SELECT caseId FROM caseRepair WHERE caseId LIKE ? ORDER BY LENGTH(caseId) DESC, caseId DESC LIMIT 1`,
-            [`${prefix}-%`]
-        );
-
-        // 3. รันเลขใหม่
-        let newId = `${prefix}-001`;
-        if (lastRows.length > 0) {
-            const lastId = lastRows[0].caseId;
-            const lastNum = parseInt(lastId.split('-')[1]);
-            newId = `${prefix}-${String(lastNum + 1).padStart(3, '0')}`;
-        }
-
-        // 4. กำหนด statusDate ตามสถานะเริ่มต้น
-        const initialStatus = caseStatus || 'รับเครื่องแล้ว';
-        const statusDateColumns = getStatusDateColumn(initialStatus);
-
-        const cleanPrice = (val) => (val !== undefined && val !== null && val !== '' && !isNaN(val)) ? parseFloat(val) : null;
-
-        let finalRepairDetails = repairDetails;
-        if (Array.isArray(req.body.repairItems)) {
-            finalRepairDetails = JSON.stringify(req.body.repairItems);
-        } else if (typeof repairDetails === 'object' && repairDetails !== null) {
-            finalRepairDetails = JSON.stringify(repairDetails);
-        }
-
-        // 5. บันทึก (ใส่ NOW() ใน created_at + statusDate)
-        const sql = `INSERT INTO caseRepair 
-        (caseId, cusFirstName, cusLastName, cusPhone, caseInstitution, 
-         brokenSymptom, caseType, caseStatus, 
-         caseBrand, caseModel, caseSN, caseDurableArticles, caseEquipment,
-         repairDetails, repairCost, repairPrice,
-         datePickUp, dateBeforePicUp, dateComplete, dateDelivered, staffName,
-         created_at${statusDateColumns.sqlColumn}) 
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW()${statusDateColumns.sqlValue})`;
-
-        await database.query(sql, [
-            newId, cusFirstName, cusLastName, cusPhone, caseInstitution || '',
-            brokenSymptom, caseType, initialStatus,
-            caseBrand || '', caseModel || '', caseSN || '', caseDurableArticles || '', caseEquipment || '',
-            finalRepairDetails || '', cleanPrice(repairCost), cleanPrice(repairPrice),
-            datePickUp || null, dateBeforePicUp || null, dateComplete || null, dateDelivered || null, staffName || ''
-        ]);
-
-        res.json({ message: 'success', caseId: newId });
-
+        connection = await database.pool.getConnection();
+        const [[lock]] = await connection.query("SELECT GET_LOCK(SHA2(CONCAT(DATABASE(), ':repair-create:', ?), 256), 5) AS acquired", [prefix]);
+        locked = Number(lock.acquired) === 1;
+        if (!locked) return res.status(503).json({ message: 'error', detail: 'มีรายการกำลังบันทึก กรุณาลองใหม่อีกครั้ง' });
+        await connection.beginTransaction();
+        const [lastRows] = await connection.query(`SELECT caseId FROM caseRepair WHERE caseId REGEXP ?
+            ORDER BY CAST(SUBSTRING_INDEX(caseId, '-', -1) AS UNSIGNED) DESC LIMIT 1`, [`^${prefix}-[0-9]+$`]);
+        const next = lastRows.length ? Number(lastRows[0].caseId.split('-')[1]) + 1 : 1;
+        const caseId = `${prefix}-${String(next).padStart(3, '0')}`;
+        const dates = getStatusDateColumn(values.caseStatus);
+        await connection.query(`INSERT INTO caseRepair (caseId, ${repairFields.join(', ')}, created_at, updated_at${dates.sqlColumn})
+            VALUES (${Array(repairFields.length + 1).fill('?').join(', ')}, NOW(), NOW()${dates.sqlValue})`, [caseId, ...repairFields.map(field => values[field])]);
+        const [[saved]] = await connection.query('SELECT * FROM caseRepair WHERE caseId = ?', [caseId]);
+        await connection.commit();
+        res.locals.auditSnapshots = { after: makeAuditSnapshot('caseRepair', saved) };
+        const data = repairResponse(saved);
+        res.json({ message: 'success', caseId, revision: data.revision, data });
     } catch (error) {
-        console.error(error);
-        res.status(500).json({ message: 'error', error: error.message });
+        if (connection) await connection.rollback().catch(() => {});
+        console.error('Create repair case failed:', error.message);
+        res.status(500).json({ message: 'error', detail: 'บันทึกงานซ่อมไม่สำเร็จ กรุณาลองใหม่' });
+    } finally {
+        if (locked) await connection.query("SELECT RELEASE_LOCK(SHA2(CONCAT(DATABASE(), ':repair-create:', ?), 256))", [prefix]).catch(() => {});
+        connection?.release();
     }
 }
 // 3. อัปเดตงานซ่อม (Update)
 export async function updateCase(req, res) {
+    const { caseId, expected_revision } = req.body;
+    if (typeof caseId !== 'string' || !caseId.trim()) return res.status(400).json({ message: 'error', detail: 'ไม่พบเลขงานซ่อม กรุณาโหลดรายการใหม่' });
+    let connection;
     try {
-        const {
-            caseId, cusFirstName, cusLastName, cusPhone, caseInstitution,
-            brokenSymptom, caseType, caseStatus,
-            caseBrand, caseModel, caseSN, caseDurableArticles, 
-            caseEquipment,
-            repairDetails, repairCost, repairPrice,
-            datePickUp, dateBeforePicUp, dateComplete, dateDelivered, staffName
-        } = req.body;
-
-        // ตรวจสอบว่าสถานะเปลี่ยนหรือไม่ เพื่อ auto-set statusDate
-        const [currentRows] = await database.query('SELECT caseStatus FROM caseRepair WHERE caseId = ?', [caseId]);
-        const oldStatus = currentRows.length > 0 ? currentRows[0].caseStatus : null;
-        const statusChanged = oldStatus !== caseStatus;
-
-        // สร้าง SQL แบบ dynamic: ถ้าสถานะเปลี่ยนจะ set statusDate ด้วย
-        let statusDateSql = '';
-        if (statusChanged && caseStatus) {
-            const col = getStatusDateColumn(caseStatus);
-            statusDateSql = col.sqlUpdate;
+        connection = await database.pool.getConnection(); await connection.beginTransaction();
+        const [rows] = await connection.query('SELECT * FROM caseRepair WHERE caseId = ? FOR UPDATE', [caseId]);
+        if (!rows.length || (expected_revision && expected_revision !== repairRevision(rows[0]))) {
+            await connection.rollback();
+            return res.status(rows.length ? 409 : 404).json({ message: 'error', detail: rows.length ? 'มีผู้อื่นแก้ไขงานนี้แล้ว กรุณาโหลดข้อมูลล่าสุดก่อนบันทึก ข้อมูลที่กรอกยังไม่ได้ถูกเขียนทับ' : 'ไม่พบงานซ่อมนี้ในระบบ ข้อมูลยังไม่ได้บันทึก' });
         }
-
-        const cleanPrice = (val) => (val !== undefined && val !== null && val !== '' && !isNaN(val)) ? parseFloat(val) : null;
-
-        let finalRepairDetails = repairDetails;
-        if (Array.isArray(req.body.repairItems)) {
-            finalRepairDetails = JSON.stringify(req.body.repairItems);
-        } else if (typeof repairDetails === 'object' && repairDetails !== null) {
-            finalRepairDetails = JSON.stringify(repairDetails);
-        }
-
-        const sql = `UPDATE caseRepair SET 
-            cusFirstName=?, cusLastName=?, cusPhone=?, caseInstitution=?,
-            brokenSymptom=?, caseType=?, caseStatus=?,
-            caseBrand=?, caseModel=?, caseSN=?, caseDurableArticles=?, caseEquipment=?,
-            repairDetails=?, repairCost=?, repairPrice=?,
-            datePickUp=?, dateBeforePicUp=?, dateComplete=?, dateDelivered=?, staffName=?,
-            updated_at=NOW()${statusDateSql}
-            WHERE caseId=?`;
-
-        await database.query(sql, [
-            cusFirstName, cusLastName, cusPhone, caseInstitution || '',
-            brokenSymptom, caseType, caseStatus,
-            caseBrand || '', caseModel || '', caseSN || '', caseDurableArticles || '', 
-            caseEquipment || '',
-            finalRepairDetails || '', cleanPrice(repairCost), cleanPrice(repairPrice),
-            datePickUp || null, dateBeforePicUp || null, dateComplete || null, dateDelivered || null, staffName || '',
-            caseId
-        ]);
-
-        res.json({ message: 'success' });
-
+        let values;
+        try { values = mergeRepairInput(req.body, rows[0]); }
+        catch (error) { await connection.rollback(); return res.status(400).json({ message: 'error', detail: error.message }); }
+        const dates = rows[0].caseStatus !== values.caseStatus ? getStatusDateColumn(values.caseStatus).sqlUpdate : '';
+        await connection.query(`UPDATE caseRepair SET ${repairFields.map(field => `${field}=?`).join(', ')}, updated_at=NOW()${dates} WHERE caseId=?`, [...repairFields.map(field => values[field]), caseId]);
+        const [[saved]] = await connection.query('SELECT * FROM caseRepair WHERE caseId = ?', [caseId]);
+        await connection.commit();
+        res.locals.auditSnapshots = { before: makeAuditSnapshot('caseRepair', rows[0]), after: makeAuditSnapshot('caseRepair', saved) };
+        const data = repairResponse(saved);
+        res.json({ message: 'success', caseId, revision: data.revision, data });
     } catch (error) {
-        console.error(error);
-        res.status(500).json({ message: 'error', error: error.message });
+        if (connection) await connection.rollback().catch(() => {});
+        console.error('Update repair case failed:', error.message);
+        res.status(500).json({ message: 'error', detail: 'บันทึกงานซ่อมไม่สำเร็จ กรุณาลองใหม่' });
+    } finally { connection?.release(); }
+}
+
+// Reading persisted data for printing does not alter or delete the repair record.
+export async function prepareCasePrint(req, res) {
+    const { caseId, expected_revision } = req.body;
+    if (typeof caseId !== 'string' || !caseId.trim()) return res.status(400).json({ message: 'error', detail: 'กรุณาบันทึกงานซ่อมก่อนพิมพ์' });
+    try {
+        const [rows] = await database.query('SELECT * FROM caseRepair WHERE caseId = ?', [caseId]);
+        if (!rows.length) return res.status(404).json({ message: 'error', detail: 'ไม่พบข้อมูลที่บันทึกในระบบ จึงยังไม่ออกใบรับซ่อม' });
+        const data = repairResponse(rows[0]);
+        if (expected_revision && expected_revision !== data.revision) return res.status(409).json({ message: 'error', detail: 'ข้อมูลถูกแก้ไขจากที่อื่น กรุณาโหลดข้อมูลล่าสุดก่อนพิมพ์' });
+        res.locals.auditSnapshots = { before: makeAuditSnapshot('caseRepair', rows[0]), after: makeAuditSnapshot('caseRepair', rows[0]) };
+        res.set('Cache-Control', 'no-store');
+        res.json({ message: 'success', caseId, revision: data.revision, data });
+    } catch (error) {
+        console.error('Prepare repair print failed:', error.message);
+        res.status(500).json({ message: 'error', detail: 'ยังยืนยันข้อมูลก่อนพิมพ์ไม่ได้ กรุณาลองอีกครั้ง ข้อมูลบนหน้าจอยังคงอยู่' });
     }
 }
 

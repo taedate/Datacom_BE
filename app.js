@@ -19,8 +19,11 @@ import inviteRouter from './router/inviteRouter.js';
 import auditLogRouter from './router/auditLogRouter.js';
 import orderNoteRouter from './router/orderNoteRouter.js';
 import templateRouter from './router/templateRouter.js';
+import productDescriptionRouter from './router/productDescriptionRouter.js';
 import inkPriceRouter from './router/inkPriceRouter.js';
 import stockRouter from './router/stockRouter.js';
+import sharedNoteRouter from './router/sharedNoteRouter.js';
+import { startSharedNoteFileCleanupJob } from './service/sharedNoteFileCleanupJob.js';
 import { startLineDigestJob } from './service/lineDigestJob.js';
 import { requestContext } from './middleware/requestContext.js';
 import { auditFallback } from './middleware/auditTrail.js';
@@ -48,6 +51,7 @@ app.use(cors({
         'https://datacom-service.com' // Domain Frontend
     ],
     credentials: true,
+    exposedHeaders: ['ETag'],
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS']
 }));
 
@@ -91,8 +95,10 @@ app.use(inviteRouter);
 app.use(auditLogRouter);
 app.use(orderNoteRouter);
 app.use(templateRouter);
+app.use(productDescriptionRouter);
 app.use(inkPriceRouter);
 app.use(stockRouter);
+app.use(sharedNoteRouter);
 
 app.post('/__deploy-check', (req, res) => {
   res.status(200).json({ ok: true, ts: new Date().toISOString() });
@@ -101,6 +107,7 @@ app.post('/__deploy-check', (req, res) => {
 // --- 6. Background Jobs ---
 startLineDigestJob();
 startAuditRetentionJob();
+startSharedNoteFileCleanupJob();
 
 // --- Start Server ---
 app.listen(port, function () {

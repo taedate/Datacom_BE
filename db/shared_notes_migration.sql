@@ -1,0 +1,11 @@
+CREATE TABLE IF NOT EXISTS shared_notes (
+  id INT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+  body TEXT NOT NULL,
+  created_by INT NOT NULL,
+  created_by_name VARCHAR(255) NOT NULL,
+  updated_by INT NOT NULL,
+  updated_by_name VARCHAR(255) NOT NULL,
+  version INT UNSIGNED NOT NULL DEFAULT 1,
+  created_at DATETIME NOT NULL,
+  updated_at DATETIME NOT NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

@@ -10,7 +10,9 @@ export const AUDIT_MODULES = new Set([
     'stock',
     'ink_price',
     'template',
+    'product_description',
     'order_note',
+    'shared_note',
     'system',
 ]);
 
@@ -29,7 +31,9 @@ export const AUDIT_ENTITY_TYPES = new Set([
     'stock',
     'ink_price',
     'template',
+    'product_description',
     'order_note',
+    'shared_note',
 ]);
 
 export const AUDIT_ACTIONS = new Set([
@@ -58,6 +62,7 @@ export const AUDIT_ACTIONS = new Set([
     'CASE_STATUS_UPDATED',
     'CASE_DELETED',
     'CASE_PRINTED',
+    'CASE_PRINT_PREPARED',
 
     'SENT_REPAIR_CREATED',
     'SENT_REPAIR_UPDATED',
@@ -95,9 +100,15 @@ export const AUDIT_ACTIONS = new Set([
     'TEMPLATE_CREATED',
     'TEMPLATE_UPDATED',
     'TEMPLATE_DELETED',
+    'PRODUCT_DESCRIPTION_CREATED',
+    'PRODUCT_DESCRIPTION_UPDATED',
+    'PRODUCT_DESCRIPTION_DELETED',
     'ORDER_NOTE_CREATED',
     'ORDER_NOTE_UPDATED',
     'ORDER_NOTE_DELETED',
+    'SHARED_NOTE_CREATED',
+    'SHARED_NOTE_UPDATED',
+    'SHARED_NOTE_DELETED',
 
     'FORBIDDEN_ACCESS',
     'VALIDATION_ERROR',

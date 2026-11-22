@@ -17,7 +17,8 @@ import {
     updateQuotationStatus
 } from '../controller/quotationController.js';
 import { auditEvent } from '../middleware/auditTrail.js';
-import { optionalAuthenticate } from '../middleware/authenticate.js';
+import { authenticate, optionalAuthenticate } from '../middleware/authenticate.js';
+import { getQuotationDashboard, getDashboardOrganizations } from '../controller/quotationDashboardController.js';
 
 const router = express.Router();
 
@@ -35,6 +36,8 @@ router.use(optionalAuthenticate);
 
 // Define routes
 router.get("/get-quotation-info", getAllQuotations);
+router.get('/quotation/dashboard', authenticate, getQuotationDashboard);
+router.get('/quotation/dashboard/organizations', authenticate, getDashboardOrganizations);
 router.get('/quotation/customers/suggest', suggestQuotationCustomers);
 router.get('/quotation/delivery-notes/suggest', suggestDeliveryNotes);
 router.get('/quotation/next-doc-id', getNextQuotationDocId);

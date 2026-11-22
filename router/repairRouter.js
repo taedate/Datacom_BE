@@ -49,6 +49,11 @@ router.post('/update-case-status', auditEvent({
 	}),
 }), repairController.updateCaseStatus);
 
+router.post('/prepare-case-print', auditEvent({
+	module: 'repair', entityType: 'caseRepair', successAction: 'CASE_PRINT_PREPARED', failSeverity: 'warning',
+	entityIdResolver: ({ req }) => req.body?.caseId || null,
+}), repairController.prepareCasePrint);
+
 router.post('/delete-case', auditEvent({
 	module: 'repair',
 	entityType: 'caseRepair',
